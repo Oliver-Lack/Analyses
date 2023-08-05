@@ -1,0 +1,4129 @@
+---
+title: "Validating a Human-AI Trust Scale"
+author: "Oliver Lack Data61 CSIRO"
+date: 2022 - 2023
+output: 
+  html_document:
+    theme: darkly
+    highlight: tango
+    code_download: true
+---
+
+<!--- "# nolint start" ---> 
+```{r Package Loading, message=FALSE, warning=FALSE, include=FALSE}
+list.of.packages <- c("tidyverse", "lsr", "haven", "RColorBrewer", "viridis",
+                      "effectsize", "gapminder", "data.table", "formattable", "rstatix", "magrittr", 
+                      "DescTools", "magrittr", "ggpubr", "dplyr", "tidyr", "pander", "bazar",
+                      "ez", "data.table", "psych", "sjPlot", "huxtable", "jtools", "papeR", "papeR", 
+                      "sjmisc", "sjlabelled", "Hmisc",
+                      "GPArotation", "circular", "stargazer", "gridExtra", "REdaS", "gtsummary")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+library(DescTools)
+library(circular)
+library(stargazer)
+library(Hmisc)
+library(gtsummary)
+library(sjPlot)
+library(huxtable)
+library(jtools)
+library(papeR)
+library(sjmisc)
+library(sjlabelled)
+library(formattable)
+library(pander)
+library(REdaS)
+library(psych)
+library(GPArotation)
+library(bazar)
+library(data.table)
+library(gridExtra)
+library(data.table)
+library(tidyr)
+library(car)
+library(lsr)
+library(gapminder)
+library(magrittr)
+library(tidyverse) 
+library(rstatix)
+library(haven) 
+library(viridis) 
+library(RColorBrewer) 
+library(effectsize) 
+library(ggpubr)
+library(dplyr)
+library(ez)
+```
+
+```{r Import and Cleaning, echo=FALSE, message=FALSE, warning=FALSE}
+Study_Data1 <- read.csv("Study 1 DATA.csv")
+Study_Data2 <- read.csv("Study 2 DATA.csv")
+Study_Data1 <- Study_Data1 
+Study_Data2 <- Study_Data2 #delete 1st row meta data
+Study_Data <- merge(Study_Data1, Study_Data2, all = TRUE)
+
+Qualtrics_DF <-  #Selecting relevant columns from csv
+  Study_Data %>% select(ResponseId, MTP_1, MTP_2, MTP_3, MTP_4, 
+                        MTP_5, MTP_6, HTP_1, HTP_2, HTP_3,
+                        HTP_4, TiAS_1, TiAS_2, TiAS_3, TiAS_4,
+                        TiAS_5, TiAS_6, TiAS_7, TiAS_8, TiAS_9,
+                        TiAS_10, TiAS_11, TiAS_12, BIS1_1,
+                        BIS1_2, BIS1_3, BIS2_1, BIS2_2, 
+                        BIS2_3, BIS3_1, BIS3_2, 
+                        BIS3_3, age, gen, Education,
+                        Application, Condition)
+
+#This is for the Factor Analysis
+#Create DFs for TIAS scale items TIAS_Items_Study_1_DF and TIAS_Items_Study_2_DF
+#Make sure these are raw scored (Do not change the reverse scored items in these DFs)
+Qualtrics2 <- copy(Qualtrics_DF)
+qualtrics2HP <- subset(Qualtrics2, Condition == 'HP')
+qualtrics2LP <- subset(Qualtrics2, Condition == 'LP')
+qualtricsStudy1 <- merge(qualtrics2HP, qualtrics2LP, all=TRUE)
+
+qualtrics2HI <- subset(Qualtrics2, Condition == 'HI')
+qualtrics2LI <- subset(Qualtrics2, Condition == 'LI')                                         
+qualtricsStudy2 <- merge(qualtrics2HI, qualtrics2LI, all=TRUE)
+
+TIAS_Items_Study_1_DF <- qualtricsStudy1[, c("TiAS_1", "TiAS_2", "TiAS_3", "TiAS_4",
+                        "TiAS_5", "TiAS_6", "TiAS_7", "TiAS_8", "TiAS_9",
+                        "TiAS_10", "TiAS_11", "TiAS_12")]                        
+TIAS_Items_Study_2_DF <- qualtricsStudy2[, c("TiAS_1", "TiAS_2", "TiAS_3", "TiAS_4",
+                        "TiAS_5", "TiAS_6", "TiAS_7", "TiAS_8", "TiAS_9",
+                        "TiAS_10", "TiAS_11", "TiAS_12")]
+
+#Change the Factor Analysis Data Frames to numeric
+cols_to_convert = c("TiAS_1", "TiAS_2", "TiAS_3", "TiAS_4",
+                        "TiAS_5", "TiAS_6", "TiAS_7", "TiAS_8", "TiAS_9",
+                        "TiAS_10", "TiAS_11", "TiAS_12")
+TIAS_Items_Study_1_DF[cols_to_convert] = lapply(TIAS_Items_Study_1_DF[cols_to_convert], as.numeric)
+cols_to_convert = c("TiAS_1", "TiAS_2", "TiAS_3", "TiAS_4",
+                        "TiAS_5", "TiAS_6", "TiAS_7", "TiAS_8", "TiAS_9",
+                        "TiAS_10", "TiAS_11", "TiAS_12")
+TIAS_Items_Study_2_DF[cols_to_convert] = lapply(TIAS_Items_Study_2_DF[cols_to_convert], as.numeric)
+
+#This code can be used to rename values in columns 
+Qualtrics_DF <- Qualtrics_DF %>%    
+      mutate_at("Application", str_replace, "S1_Car", "Car")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Application", str_replace, "S2_VA", "CellSelect")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Application", str_replace, "S3_Doc", "DataDoc")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Application", str_replace, "S3_Air", "Airline")
+
+#This code can be used to rename values in columns 
+Qualtrics_DF <- Qualtrics_DF %>%    
+      mutate_at("gen", str_replace, "1", "Male")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("gen", str_replace, "2", "Female")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("gen", str_replace, "3", "Other")
+
+
+#This code can be used to change character Likert responses into numeric 1-7 values 
+cols1 <- c("MTP_1", "MTP_2", "MTP_3", "MTP_4", 
+                        "MTP_5", "MTP_6", "HTP_1", "HTP_2", "HTP_3",
+                        "HTP_4", "BIS1_1",
+                        "BIS1_2", "BIS1_3", "BIS2_1", "BIS2_2", 
+                        "BIS2_3", "BIS3_1", "BIS3_2", 
+                        "BIS3_3")
+
+values1 <- c("Strongly disagree", "Somewhat disagree", "Disagree", 
+            "Neither agree nor disagree", "Somewhat agree", "Agree", "Strongly agree")
+
+numeric_values <- as.character(1:7)
+
+for (col1 in cols1) {
+  for (i in seq_along(values1)) {
+    Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at(col1, str_replace, values1[i], numeric_values[i])
+  }
+}
+
+#Change everything required to numeric variables (default import is set to character)
+cols_to_convert = c("MTP_1", "MTP_2", "MTP_3", "MTP_4", 
+                    "MTP_5", "MTP_6", "HTP_1", "HTP_2", "HTP_3",
+                    "HTP_4", "BIS1_1",
+                    "BIS1_2", "BIS1_3", "BIS2_1", "BIS2_2", 
+                    "BIS2_3", "BIS3_1", "BIS3_2", 
+                    "BIS3_3", "age", "TiAS_1", "TiAS_2", "TiAS_3", "TiAS_4",
+                    "TiAS_5", "TiAS_6", "TiAS_7", "TiAS_8", "TiAS_9",
+                    "TiAS_10", "TiAS_11", "TiAS_12")
+Qualtrics_DF[cols_to_convert] = lapply(Qualtrics_DF[cols_to_convert], as.numeric)
+
+#Change everything relevant to factor variables 
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(gen = as.factor(gen))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Education = as.factor(Education))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Application = as.factor(Application))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Condition = as.factor(Condition))
+
+#Fixing education. Mutate to 1-7, collapse the postgraduate options, and make numeric variable. 
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "Less than High School", "1")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "High School / GED", "2")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "Some College", "3")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "2-Year College Degree", "4")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "4-Year College Degree", "5")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "Master's Degree", "6")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "Doctoral Degree", "6")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "Professional Degree", "6")
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Education = as.numeric(Education))
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "7", "6")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("Education", str_replace, "8", "6")
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Education = as.numeric(Education))
+
+#REVERSAL of REVERSE SCORES
+#This is a method to change the reverse scored items so they can be averaged into one column
+Qualtrics_DF$TiAS_1 <- 8 - Qualtrics_DF$TiAS_1    
+Qualtrics_DF$TiAS_2 <- 8 - Qualtrics_DF$TiAS_2       
+Qualtrics_DF$TiAS_3 <- 8 - Qualtrics_DF$TiAS_3       
+Qualtrics_DF$TiAS_4 <- 8 - Qualtrics_DF$TiAS_4     
+Qualtrics_DF$TiAS_5 <- 8 - Qualtrics_DF$TiAS_5       
+
+Qualtrics_DF$MTP_2 <- 8 - Qualtrics_DF$MTP_2       
+
+
+#This is a method to average the score of the items of each scale and make new column
+Qualtrics_DF$TIAS <- rowMeans(Qualtrics_DF[, grep("TiAS", colnames(Qualtrics_DF))])                           
+Qualtrics_DF$Behavioural_Measure <- rowMeans(Qualtrics_DF[, grep("BI", colnames(Qualtrics_DF))], na.rm = TRUE)
+Qualtrics_DF$Human_Trust_Propensity <- rowMeans(Qualtrics_DF[, grep("HTP", colnames(Qualtrics_DF))], na.rm = TRUE)
+Qualtrics_DF$Machine_Trust_Propensity <- rowMeans(Qualtrics_DF[, grep("MTP", colnames(Qualtrics_DF))], na.rm = TRUE)
+
+Qualtrics_DF <-  #Renaming columns for readability
+  Qualtrics_DF %>% rename(ID = ResponseId,
+                              Age = age, 
+                              Education = Education,
+                              Gender = gen, 
+                              AI_Application = Application)
+
+```
+
+```{r subsetting data frame, echo=FALSE, message=FALSE, warning=FALSE}
+
+#DF split into condition and study DFs
+
+HP_DF <- subset(Qualtrics_DF, Condition == 'HP')
+
+LP_DF <- subset(Qualtrics_DF, Condition == 'LP')
+
+Study_1_DF <- merge(HP_DF, LP_DF, all = TRUE)
+
+
+HI_DF <- subset(Qualtrics_DF, Condition == 'HI')
+
+LI_DF <- subset(Qualtrics_DF, Condition == 'LI')
+
+Study_2_DF <- merge(HI_DF, LI_DF, all = TRUE)
+
+High_DF <- merge(HP_DF, HI_DF, all = TRUE)
+Low_DF <- merge(LP_DF, LI_DF, all = TRUE)
+
+
+#DF split into AI application DFs
+
+Car_DF <- subset(Qualtrics_DF, AI_Application == 'Car')
+
+CellSelect_DF <- subset(Qualtrics_DF, AI_Application == 'CellSelect')
+
+DataDoc_DF <- subset(Qualtrics_DF, AI_Application == 'DataDoc')
+
+Airline_DF <- subset(Qualtrics_DF, AI_Application == 'Airline')
+
+#DF split by application and study
+Study_1_Car_DF <- subset(Study_1_DF, AI_Application == 'Car')
+Study_2_Car_DF <- subset(Study_2_DF, AI_Application == 'Car')
+Study_1_CellSelect_DF <- subset(Study_1_DF, AI_Application == 'CellSelect')
+Study_2_CellSelect_DF <- subset(Study_2_DF, AI_Application == 'CellSelect')
+Study_1_DataDoc_DF <- subset(Study_1_DF, AI_Application == 'DataDoc')
+Study_2_Airline_DF <- subset(Study_2_DF, AI_Application == 'Airline')
+
+#^^Splitting further to reduce down to Male/Female ONLY for regression
+Study_1_Car_Regression_DF <- subset(Study_1_Car_DF, Gender %in% c("Male", "Female"))
+Study_2_Car_Regression_DF <- subset(Study_2_Car_DF, Gender %in% c("Male", "Female"))
+Study_1_CellSelect_Regression_DF <- subset(Study_1_CellSelect_DF, Gender %in% c("Male", "Female"))
+Study_2_CellSelect_Regression_DF <- subset(Study_2_CellSelect_DF, Gender %in% c("Male", "Female"))
+Study_1_DataDoc_Regression_DF <- subset(Study_1_DataDoc_DF, Gender %in% c("Male", "Female"))
+Study_2_Airline_Regression_DF <- subset(Study_2_Airline_DF, Gender %in% c("Male", "Female"))
+
+Study_1_Regression_DF <- subset(Study_1_DF, Gender %in% c("Male", "Female"))
+Study_2_Regression_DF <- subset(Study_2_DF, Gender %in% c("Male", "Female"))
+
+
+#DF split by Application and Condition
+Car_HP_DF<- subset(Car_DF, Condition == 'HP')
+Car_LP_DF<- subset(Car_DF, Condition == 'LP')
+Car_HI_DF<- subset(Car_DF, Condition == 'HI')
+Car_LI_DF<- subset(Car_DF, Condition == 'LI')
+
+CellSelect_HP_DF<- subset(CellSelect_DF, Condition == 'HP')
+CellSelect_LP_DF<- subset(CellSelect_DF, Condition == 'LP')
+CellSelect_HI_DF<- subset(CellSelect_DF, Condition == 'HI')
+CellSelect_LI_DF<- subset(CellSelect_DF, Condition == 'LI')
+
+DataDoc_HP_DF<- subset(DataDoc_DF, Condition == 'HP')
+DataDoc_LP_DF<- subset(DataDoc_DF, Condition == 'LP')
+Airline_HI_DF<- subset(Airline_DF, Condition == 'HI')
+Airline_LI_DF<- subset(Airline_DF, Condition == 'LI')
+
+
+```
+
+# Analyses {.tabset}
+
+## Summary Statistics {.tabset}
+<br>
+
+### Study 1 - Performance {.tabset}
+<br>
+
+#### Group Count
+
+```{r Group Count1, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Participant count condition by application
+
+Car_Group_Count <- Study_1_Car_DF %>%
+  group_by(Condition) %>% summarise(n = n()) 
+Car_Group_Count <- 
+  Car_Group_Count %>% rename(Autonomous_Car = n)
+
+CellSelect_Group_Count <- Study_1_CellSelect_DF %>%
+  group_by(Condition) %>% summarise(n = n()) 
+CellSelect_Group_Count <- 
+  CellSelect_Group_Count %>% rename(Cell_Select = n)
+
+DataDoc_Group_Count <- Study_1_DataDoc_DF %>%
+  group_by(Condition) %>% summarise(n = n())
+DataDoc_Group_Count <- 
+  DataDoc_Group_Count %>% rename(DataDoc = n)
+
+Group_Count <- cbind(Car_Group_Count, 
+                     CellSelect_Group_Count, 
+                     DataDoc_Group_Count
+                     )
+
+formattable(Group_Count, align =c("c"), list(
+  `Autonomous_Car` = color_bar("orange"),
+  `Cell_Select` = color_bar("orange"),
+  `DataDoc` = color_bar("orange")),
+
+     table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+```
+
+#### Demographics
+<br><br><br>
+
+**Age**
+
+```{r age1, echo=FALSE, message=FALSE, warning=FALSE}
+Age_Summary <- Study_1_DF %>% 
+  summarise(Mean = round(mean(Age, na.rm = TRUE),2),
+            SD = round(sd(Age, na.rm = TRUE),2),
+            Min = round(min(Age, na.rm = TRUE),2), 
+            Max = round(max(Age, na.rm = TRUE),2), 
+            Median = round(median(Age, na.rm = TRUE),2) 
+            ) 
+
+formattable(Age_Summary, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+
+```
+
+<br><br><br>
+
+**Gender**
+
+```{r gender1, echo=FALSE, message=FALSE, warning=FALSE}
+Gender_Group_Count <- Study_1_DF %>%
+  group_by(Gender) %>% summarise(n = n())
+Gender_Group_Count <- 
+  Gender_Group_Count %>% rename(n = n)
+
+formattable(Gender_Group_Count, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+
+```
+<br><br><br>
+
+**Education**
+
+```{r education1, echo=FALSE, message=FALSE, warning=FALSE}
+Education_Group_Count <- Study_1_DF %>%
+  group_by(Education) %>% summarise(n = n())
+Education_Group_Count <- 
+  Education_Group_Count %>% rename(n = n)
+
+formattable(Education_Group_Count, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+```
+
+#### Full Summary
+
+```{r Mega Summary1, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Human Trust Propensity
+
+Mega_Human_Trust_Propensity_Summary <-
+Study_1_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Mega_Human_Trust_Propensity_Summary$Score <- rep("Human_Trust_Propensity", times = 6)
+
+
+#Machine Trust Propensity
+
+Mega_Machine_Trust_Propensity_Summary <-
+Study_1_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Mega_Machine_Trust_Propensity_Summary$Score <- rep("Machine_Trust_Propensity", times = 6)
+
+
+#TIAS
+
+Mega_TIAS_Summary <-
+Study_1_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+Mega_TIAS_Summary$Score <- rep("TIAS", times = 6)
+
+#Behavioural Measure
+
+Mega_Behavioural_Measure_Summary <-
+Study_1_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+Mega_Behavioural_Measure_Summary$Score <- rep("Behavioural_Measure", times = 6)
+
+
+###Final Table
+
+Mega_Summary_List <- list(Mega_Human_Trust_Propensity_Summary, 
+                          Mega_Machine_Trust_Propensity_Summary, 
+                          Mega_TIAS_Summary, 
+                          Mega_Behavioural_Measure_Summary)
+Mega_Summary <- Mega_Summary_List %>% reduce(full_join, by=NULL)
+
+formattable(Mega_Summary, align =c("c"), list( 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+```
+
+#### Application Summary
+
+```{r Application Summary1, echo=FALSE, message=FALSE, warning=FALSE}
+Propensity_Car_Summary <- Study_1_Car_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_CellSelect_Summary <- Study_1_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+
+Human_Propensity_List <- list(Propensity_Car_Summary, 
+                  Propensity_CellSelect_Summary, 
+                  Propensity_DataDoc_Summary,
+                  Propensity_Airline_Summary)
+Human_Trust_Propensity_Summary <- Human_Propensity_List %>% reduce(full_join, by=NULL)
+Human_Trust_Propensity_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+Human_Trust_Propensity_Summary$Score <- rep("Human Trust Propensity", times = 4)
+Full_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Human_Trust_Propensity_Summary <- Human_Trust_Propensity_Summary[, Full_Order]
+
+M_Propensity_Car_Summary <- Study_1_Car_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_CellSelect_Summary <- Study_1_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+
+Machine_Propensity_List <- list(M_Propensity_Car_Summary, 
+                  M_Propensity_CellSelect_Summary, 
+                  M_Propensity_DataDoc_Summary,
+                  M_Propensity_Airline_Summary)
+Machine_Trust_Propensity_Summary <- Machine_Propensity_List %>% reduce(full_join, by=NULL)
+Machine_Trust_Propensity_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+Machine_Trust_Propensity_Summary$Score <- rep("Machine Trust Propensity", times = 4)
+Machine_Trust_Propensity_Summary <- Machine_Trust_Propensity_Summary[, Full_Order]
+
+TIAS_Car_Summary <- Study_1_Car_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_CellSelect_Summary <- Study_1_CellSelect_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+
+TIAS_List <- list(TIAS_Car_Summary, 
+                  TIAS_CellSelect_Summary, 
+                  TIAS_DataDoc_Summary,
+                  TIAS_Airline_Summary)
+TIAS_Summary <- TIAS_List %>% reduce(full_join, by=NULL)
+TIAS_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+TIAS_Summary$Score <- rep("TIAS Score", times = 4)
+TIAS_Summary <- TIAS_Summary[, Full_Order]
+
+BM_Car_Summary <- Study_1_Car_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_CellSelect_Summary <- Study_1_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+
+BM_List <- list(BM_Car_Summary, 
+                  BM_CellSelect_Summary, 
+                  BM_DataDoc_Summary,
+                  BM_Airline_Summary)
+BM_Summary <- BM_List %>% reduce(full_join, by=NULL)
+BM_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+BM_Summary$Score <- rep("Behavioural Measure", times = 4)
+BM_Summary <- BM_Summary[, Full_Order]
+
+
+Summary_List <- list(Human_Trust_Propensity_Summary, 
+                     Machine_Trust_Propensity_Summary, 
+                     TIAS_Summary, 
+                     BM_Summary)
+Summary <- Summary_List %>% reduce(full_join, by=NULL)
+
+formattable(Summary, align =c("l","c","c", "c", "c", "c", "r"), list(
+  `Score` = formatter("span", style = ~ style(color = "whitesmoke",font.weight = "normal")), 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+```
+
+#### Means Comparison 
+
+```{r Means Comparison1, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+#High conditions side
+
+TIAS_Behavioural_Means_High <-
+HP_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(TIAS_Mean = round(mean(TIAS, na.rm = TRUE),2),
+            Behavioural_Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2)
+  )
+
+#Low conditions side
+
+TIAS_Behavioural_Means_Low <-
+LP_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(TIAS_Mean = round(mean(TIAS, na.rm = TRUE),2),
+            Behavioural_Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2)
+  )
+
+Means_Summary <- cbind(TIAS_Behavioural_Means_High, TIAS_Behavioural_Means_Low)
+Means_Summary <-  #Renaming columns for readability
+  Means_Summary %>% rename(TIAS_Mean1 = TIAS_Mean...3,
+                              TIAS_Mean2 = TIAS_Mean...7,    
+                              Behavioural_Mean1 = Behavioural_Mean...4, 
+                              Behavioural_Mean2 = Behavioural_Mean...8, 
+                              AI_Application_H = AI_Application...1, 
+                              AI_Application_L = AI_Application...5, 
+                              Condition_H = Condition...2, 
+                              Condition_L = Condition...6, 
+                              )
+formattable(Means_Summary, align = "c", list(
+ TIAS_Mean1 = color_bar("orange"),
+  TIAS_Mean2 = color_bar("orange"),
+   Behavioural_Mean1 = color_bar("lightblue"),
+    Behavioural_Mean2 = color_bar("lightblue")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+```
+
+
+
+
+
+
+<br>
+
+### Study 2 - Integrity {.tabset}
+
+<br>
+
+
+#### Group Count
+
+```{r Group Count, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Participant count condition by application
+
+Car_Group_Count <- Study_2_Car_DF %>%
+  group_by(Condition) %>% summarise(n = n()) 
+Car_Group_Count <- 
+  Car_Group_Count %>% rename(Autonomous_Car = n)
+
+CellSelect_Group_Count <- Study_2_CellSelect_DF %>%
+  group_by(Condition) %>% summarise(n = n()) 
+CellSelect_Group_Count <- 
+  CellSelect_Group_Count %>% rename(Cell_Select = n)
+
+Airline_Group_Count <- Study_2_Airline_DF %>%
+  group_by(Condition) %>% summarise(n = n())
+Airline_Group_Count <- 
+  Airline_Group_Count %>% rename(Airline = n)
+
+Group_Count <- cbind(Car_Group_Count, 
+                     CellSelect_Group_Count, 
+                     Airline_Group_Count)
+
+formattable(Group_Count, align =c("c"), list(
+  `Autonomous_Car` = color_bar("orange"),
+  `Cell_Select` = color_bar("orange"),
+  `Airline` = color_bar("orange")),
+
+     table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+```
+
+#### Demographics
+
+<br><br><br>
+
+**Age**
+
+```{r age, echo=FALSE, message=FALSE, warning=FALSE}
+Age_Summary <- Study_2_DF %>% 
+  summarise(Mean = round(mean(Age, na.rm = TRUE),2),
+            SD = round(sd(Age, na.rm = TRUE),2),
+            Min = round(min(Age, na.rm = TRUE),2), 
+            Max = round(max(Age, na.rm = TRUE),2), 
+            Median = round(median(Age, na.rm = TRUE),2) 
+            ) 
+
+formattable(Age_Summary, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+
+```
+<br><br><br>
+
+**Gender**
+
+```{r gender, echo=FALSE, message=FALSE, warning=FALSE}
+Gender_Group_Count <- Study_2_DF %>%
+  group_by(Gender) %>% summarise(n = n())
+Gender_Group_Count <- 
+  Gender_Group_Count %>% rename(n = n)
+
+formattable(Gender_Group_Count, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+
+```
+<br><br><br>
+
+**Education**
+```{r education, echo=FALSE, message=FALSE, warning=FALSE}
+Education_Group_Count <- Study_2_DF %>%
+  group_by(Education) %>% summarise(n = n())
+Education_Group_Count <- 
+  Education_Group_Count %>% rename(n = n)
+
+formattable(Education_Group_Count, align = "c", 
+      table.attr = 'class=\"table table-striped\" style="font-size: 18px"'
+     )
+```
+
+#### Full Summary
+
+```{r Mega Summary, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Human Trust Propensity
+
+Mega_Human_Trust_Propensity_Summary <-
+Study_2_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Mega_Human_Trust_Propensity_Summary$Score <- rep("Human_Trust_Propensity", times = 6)
+
+#Machine Trust Propensity
+
+Mega_Machine_Trust_Propensity_Summary <-
+Study_2_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Mega_Machine_Trust_Propensity_Summary$Score <- rep("Machine_Trust_Propensity", times = 6)
+
+#TIAS
+
+Mega_TIAS_Summary <-
+Study_2_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+Mega_TIAS_Summary$Score <- rep("TIAS", times = 6)
+
+#Behavioural Measure
+
+Mega_Behavioural_Measure_Summary <-
+Study_2_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+Mega_Behavioural_Measure_Summary$Score <- rep("Behaviuoral_Measure", times = 6)
+
+
+###Final Table
+
+Mega_Summary_List <- list(Mega_Human_Trust_Propensity_Summary, 
+                          Mega_Machine_Trust_Propensity_Summary, 
+                          Mega_TIAS_Summary, 
+                          Mega_Behavioural_Measure_Summary)
+Mega_Summary <- Mega_Summary_List %>% reduce(full_join, by=NULL)
+
+formattable(Mega_Summary, align =c("c"), list( 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+```
+
+#### Application Summary
+
+```{r Application Summary, echo=FALSE, message=FALSE, warning=FALSE}
+Propensity_Car_Summary <- Study_2_Car_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_CellSelect_Summary <- Study_2_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+Propensity_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Human_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Human_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Human_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Human_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+
+Human_Propensity_List <- list(Propensity_Car_Summary, 
+                  Propensity_CellSelect_Summary, 
+                  Propensity_DataDoc_Summary,
+                  Propensity_Airline_Summary)
+Human_Trust_Propensity_Summary <- Human_Propensity_List %>% reduce(full_join, by=NULL)
+Human_Trust_Propensity_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+Human_Trust_Propensity_Summary$Score <- rep("Human Trust Propensity", times = 4)
+Full_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Human_Trust_Propensity_Summary <- Human_Trust_Propensity_Summary[, Full_Order]
+
+M_Propensity_Car_Summary <- Study_2_Car_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_CellSelect_Summary <- Study_2_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+M_Propensity_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Machine_Trust_Propensity, na.rm = TRUE),2),
+            SD = round(sd(Machine_Trust_Propensity, na.rm = TRUE),2),
+            Min = round(min(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Max = round(max(Machine_Trust_Propensity, na.rm = TRUE),2), 
+            Median = round(median(Machine_Trust_Propensity, na.rm = TRUE),2) 
+            ) 
+
+Machine_Propensity_List <- list(M_Propensity_Car_Summary, 
+                  M_Propensity_CellSelect_Summary, 
+                  M_Propensity_DataDoc_Summary,
+                  M_Propensity_Airline_Summary)
+Machine_Trust_Propensity_Summary <- Machine_Propensity_List %>% reduce(full_join, by=NULL)
+Machine_Trust_Propensity_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+Machine_Trust_Propensity_Summary$Score <- rep("Machine Trust Propensity", times = 4)
+Machine_Trust_Propensity_Summary <- Machine_Trust_Propensity_Summary[, Full_Order]
+
+TIAS_Car_Summary <- Study_2_Car_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_CellSelect_Summary <- Study_2_CellSelect_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+TIAS_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(TIAS, na.rm = TRUE),2),
+            SD = round(sd(TIAS, na.rm = TRUE),2),
+            Min = round(min(TIAS, na.rm = TRUE),2), 
+            Max = round(max(TIAS, na.rm = TRUE),2), 
+            Median = round(median(TIAS, na.rm = TRUE),2) 
+            ) 
+
+TIAS_List <- list(TIAS_Car_Summary, 
+                  TIAS_CellSelect_Summary, 
+                  TIAS_DataDoc_Summary,
+                  TIAS_Airline_Summary)
+TIAS_Summary <- TIAS_List %>% reduce(full_join, by=NULL)
+TIAS_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+TIAS_Summary$Score <- rep("TIAS Score", times = 4)
+TIAS_Summary <- TIAS_Summary[, Full_Order]
+
+BM_Car_Summary <- Study_2_Car_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_CellSelect_Summary <- Study_2_CellSelect_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_DataDoc_Summary <- Study_1_DataDoc_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+BM_Airline_Summary <- Study_2_Airline_DF %>% 
+  summarise(Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2),
+            SD = round(sd(Behavioural_Measure, na.rm = TRUE),2),
+            Min = round(min(Behavioural_Measure, na.rm = TRUE),2), 
+            Max = round(max(Behavioural_Measure, na.rm = TRUE),2), 
+            Median = round(median(Behavioural_Measure, na.rm = TRUE),2) 
+            ) 
+
+BM_List <- list(BM_Car_Summary, 
+                  BM_CellSelect_Summary, 
+                  BM_DataDoc_Summary,
+                  BM_Airline_Summary)
+BM_Summary <- BM_List %>% reduce(full_join, by=NULL)
+BM_Summary$AI_Application <- c("Car", "Cell Select", "DataDoc", "Airline")
+BM_Summary$Score <- rep("Behavioural Measure", times = 4)
+BM_Summary <- BM_Summary[, Full_Order]
+
+
+Summary_List <- list(Human_Trust_Propensity_Summary, 
+                     Machine_Trust_Propensity_Summary, 
+                     TIAS_Summary, 
+                     BM_Summary)
+Summary <- Summary_List %>% reduce(full_join, by=NULL)
+
+formattable(Summary, align =c("l","c","c", "c", "c", "c", "r"), list(
+  `Score` = formatter("span", style = ~ style(color = "whitesmoke",font.weight = "normal")), 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+```
+
+#### Means Comparison 
+
+```{r Means Comparison, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+#High conditions side
+
+TIAS_Behavioural_Means_High <-
+HI_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(TIAS_Mean = round(mean(TIAS, na.rm = TRUE),2),
+            Behavioural_Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2)
+  )
+
+#Low conditions side
+
+TIAS_Behavioural_Means_Low <-
+LI_DF %>%
+group_by(AI_Application, Condition) %>%
+  summarise(TIAS_Mean = round(mean(TIAS, na.rm = TRUE),2),
+            Behavioural_Mean = round(mean(Behavioural_Measure, na.rm = TRUE),2)
+  )
+
+Means_Summary <- cbind(TIAS_Behavioural_Means_High, TIAS_Behavioural_Means_Low)
+Means_Summary <-  #Renaming columns for readability
+  Means_Summary %>% rename(TIAS_Mean1 = TIAS_Mean...3,
+                              TIAS_Mean2 = TIAS_Mean...7,    
+                              Behavioural_Mean1 = Behavioural_Mean...4, 
+                              Behavioural_Mean2 = Behavioural_Mean...8, 
+                              AI_Application_H = AI_Application...1, 
+                              AI_Application_L = AI_Application...5, 
+                              Condition_H = Condition...2, 
+                              Condition_L = Condition...6, 
+                              )
+formattable(Means_Summary, align = "c", list(
+ `TIAS_Mean1` = color_bar("orange"),
+  `TIAS_Mean2` = color_bar("orange"),
+   `Behavioural_Mean1` = color_bar("lightblue"),
+    `Behavioural_Mean2` = color_bar("lightblue")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+```
+
+
+
+## Violin/Box-Plot Visualisation {.tabset}
+**Measure**
+
+### TIAS
+```{r Violin Box Visualisation1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Car_Violin_Box <- ggplot(data = Car_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for AI Car") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Car_Violin_Box
+
+TIAS_CellSelect_Violin_Box <- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for Cell Select") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_CellSelect_Violin_Box
+
+TIAS_DataDoc_Violin_Box <- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for DataDoc") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_DataDoc_Violin_Box
+
+TIAS_Airline_Violin_Box <- ggplot(data = Airline_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for Airline Profiling AI") +
+  labs(tag = "Figure 4",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Airline_Violin_Box
+```
+
+### Behavioural Measure
+
+```{r Violin Box Visualisation2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Behavioural_Car_Violin_Box <- ggplot(data = Car_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Behavioural Score Between Manipulation Conditions for AI Car") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Behavioural_Car_Violin_Box
+
+Behavioural_CellSelect_Violin_Box <- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Behavioural Score Between Manipulation Conditions for Cell Select") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Behavioural_CellSelect_Violin_Box
+
+Behavioural_DataDoc_Violin_Box <- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Behavioural Score Between Manipulation Conditions for DataDoc") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Behavioural_DataDoc_Violin_Box
+
+Behavioural_Airline_Violin_Box <- ggplot(data = Airline_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Behavioural Score Between Manipulation Conditions for Airline Profiling AI") +
+  labs(tag = "Figure 4",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Behavioural_Airline_Violin_Box
+```
+
+## Jitter-Plot Visualisation {.tabset}
+**Meausre**
+
+### TIAS
+
+```{r Jitter Visualisation1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Car_Jitter <- ggplot(data = Car_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for AI Car") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+TIAS_Car_Jitter 
+
+TIAS_CellSelect_Jitter <- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for Cell Select") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+TIAS_CellSelect_Jitter 
+
+
+TIAS_DataDoc_Jitter <- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for DataDoc") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+TIAS_DataDoc_Jitter
+
+
+TIAS_Airline_Jitter <- ggplot(data = Airline_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for Airline") +
+  labs(tag = "Figure 4") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+TIAS_Airline_Jitter
+```
+
+### Behaviuoral Measure
+
+```{r Jitter2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Behavioural_Car_Jitter <- ggplot(data = Car_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Behavioural Score Between Conditions for AI Car") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Behavioural_Car_Jitter 
+
+Behavioural_CellSelect_Jitter <- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Behavioural Score Between Conditions for Cell Select") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Behavioural_CellSelect_Jitter
+
+
+Behavioural_DataDoc_Jitter <- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Behavioural Score Between Conditions for DataDoc") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Behavioural_DataDoc_Jitter
+
+
+
+Behavioural_Airline_Jitter <- ggplot(data = Airline_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 colour = Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Behavioural Score Between Conditions for Airline Profiling AI") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Behavioural_Airline_Jitter
+
+```
+
+## Scatterplot Visualisation {.tabset}
+
+### TIAS/Behavioural_Measure
+
+```{r Scatter1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_TIAS_Behaviour_scatter<- ggplot(data = Car_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Score for AI Car") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+Car_TIAS_Behaviour_scatter
+
+
+CellSelect_TIAS_Behaviour_scatter<- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Score for Cell Select") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+CellSelect_TIAS_Behaviour_scatter
+
+
+DataDoc_TIAS_Behaviour_scatter<- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Score for DataDoc") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+DataDoc_TIAS_Behaviour_scatter
+
+
+Airline_TIAS_Behaviour_scatter<- ggplot(data = Airline_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Score for Airline Profiling") +
+  labs(tag = "Figure 4") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+Airline_TIAS_Behaviour_scatter
+
+```
+
+### TIAS/Human_Trust_Propensity
+
+```{r Scatter2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_TIAS_HTP_scatter<- ggplot(data = Car_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Human_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Human Trust Propensity for AI Car") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Human Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+ xlim(0, 7) + 
+  ylim(0, 7) 
+
+Car_TIAS_HTP_scatter
+
+
+CellSelect_TIAS_HTP_scatter<- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Human_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Human Trust Propensity for Cell Select") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Human Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+CellSelect_TIAS_HTP_scatter
+
+
+DataDoc_TIAS_HTP_scatter<- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Human_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Human Trust Propensity for DataDoc") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Human Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+ xlim(0, 7) + 
+  ylim(0, 7) 
+
+DataDoc_TIAS_HTP_scatter
+
+
+Airline_TIAS_HTP_scatter<- ggplot(data = Airline_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Human_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Human Trust Propensity for Airline") +
+  labs(tag = "Figure 4") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Human Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+Airline_TIAS_HTP_scatter
+
+```
+
+### TIAS/Machine_Trust_Propensity
+
+```{r Scatter3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_TIAS_MTP_scatter<- ggplot(data = Car_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Machine_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Machine Trust Propensity for AI Car") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Machine Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+Car_TIAS_MTP_scatter
+
+
+CellSelect_TIAS_MTP_scatter<- ggplot(data = CellSelect_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Machine_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Machine Trust Propensity for Cell Select") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Machine Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+CellSelect_TIAS_MTP_scatter
+
+
+DataDoc_TIAS_MTP_scatter<- ggplot(data = DataDoc_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Machine_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Machine Trust Propensity for DataDoc") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Machine Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+DataDoc_TIAS_MTP_scatter
+
+
+Airline_TIAS_MTP_scatter<- ggplot(data = Airline_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Machine_Trust_Propensity,
+                                 colour = Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Machine Trust Propensity for Airline Profiler") +
+  labs(tag = "Figure 4") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Machine Trust Propensity Score") + 
+  xlab("TIAS Score") + 
+xlim(0, 7) + 
+  ylim(0, 7) 
+
+Airline_TIAS_MTP_scatter
+
+```
+
+
+## T-Tests {.tabset}
+
+<br>**Analysis 1**<br>
+**One Tailed T-Tests**
+
+<br>
+High generalisability across 
+AI applications if each applications 
+TIAS score distributions adaquately 
+respond to the manipulation conditions.
+<br>
+<b>Research Question:</b>Is the TIAS applicable across various AI systems?<br>
+<b>Research Hypotheses:</b>Firstly, we hypothesise that the TIAS scores of 
+the high performance/integrity 
+conditions will be significantly
+ higher than the low performance/integrity
+  conditions for each AI application.
+<br><br>
+<b>One-Tailed T-Tests</b> 
+with bonferroni correction 
+between the TIAS distributions 
+of the high/low conditions for 
+each application 
+
+### Study 1 - Performance
+**Car HP/LP**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_1_Car_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+**Cell Select HP/LP**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_1_CellSelect_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+**DataDoc HP/LP**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_1_DataDoc_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+### Study 2 - Integrity
+**Car HI/LI**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_2_Car_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+**Cell Select HI/LI**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_2_CellSelect_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+**Airline HI/LI**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(TIAS ~ Condition, 
+ data = Study_2_Airline_DF,
+ alternative = "greater", 
+ p.adj = "bonferroni")
+```
+
+
+## Correlations {.tabset}
+<br>**Analysis 2**<br>
+**Correlations**
+
+<br>
+The convergent validity is assesed through the correlations
+between the TIAS scores and measures of similar constructs below. 
+<br>
+<b>Research Question:</b>Is the TIAS a valid measure of trust in AI?  <br>
+<b>Research Hypotheses:</b>Secondly, it is hypothesised that there 
+will be a positive association between the TIAS scores and the 
+following measures: the Human Trust propensity scale and the 
+Machine Trust propensity scale.
+<br><br>
+
+### Collapsed Overall Correlations 
+
+<br>
+<br>
+**Study 1**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(Study_1_DF$TIAS, Study_1_DF$Behavioural_Measure, method = "pearson")
+cor.test(Study_1_DF$TIAS, Study_1_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Study_1_DF$TIAS, Study_1_DF$Machine_Trust_Propensity, method = "pearson")
+```
+<br>
+<br>
+**Study 2**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(Study_2_DF$TIAS, Study_2_DF$Behavioural_Measure, method = "pearson")
+cor.test(Study_2_DF$TIAS, Study_2_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Study_2_DF$TIAS, Study_2_DF$Machine_Trust_Propensity, method = "pearson")
+```
+
+
+
+### Between Conditions {.tabset}
+
+<br>
+
+#### **Car**
+
+<br>
+<br>
+```{r Correlation car1, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(Car_HP_DF$TIAS, Car_HP_DF$Behavioural_Measure, method = "pearson")
+cor.test(Car_LP_DF$TIAS, Car_LP_DF$Behavioural_Measure, method = "pearson")
+cor.test(Car_HI_DF$TIAS, Car_HI_DF$Behavioural_Measure, method = "pearson")
+cor.test(Car_LI_DF$TIAS, Car_LI_DF$Behavioural_Measure, method = "pearson")
+cor.test(Car_HP_DF$TIAS, Car_HP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Car_LP_DF$TIAS, Car_LP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Car_HI_DF$TIAS, Car_HI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Car_LI_DF$TIAS, Car_LI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Car_HP_DF$TIAS, Car_HP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(Car_LP_DF$TIAS, Car_LP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(Car_HI_DF$TIAS, Car_HI_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(Car_LI_DF$TIAS, Car_LI_DF$Machine_Trust_Propensity, method = "pearson")
+```
+
+<br>
+
+#### **Cell Select**
+
+<br>
+<br>
+```{r Correlation cellselect1, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(CellSelect_HP_DF$TIAS, CellSelect_HP_DF$Behavioural_Measure, method = "pearson")
+cor.test(CellSelect_LP_DF$TIAS, CellSelect_LP_DF$Behavioural_Measure, method = "pearson")
+cor.test(CellSelect_HI_DF$TIAS, CellSelect_HI_DF$Behavioural_Measure, method = "pearson")
+cor.test(CellSelect_LI_DF$TIAS, CellSelect_LI_DF$Behavioural_Measure, method = "pearson")
+cor.test(CellSelect_HP_DF$TIAS, CellSelect_HP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_LP_DF$TIAS, CellSelect_LP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_HI_DF$TIAS, CellSelect_HI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_LI_DF$TIAS, CellSelect_LI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_HP_DF$TIAS, CellSelect_HP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_LP_DF$TIAS, CellSelect_LP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_HI_DF$TIAS, CellSelect_HI_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(CellSelect_LI_DF$TIAS, CellSelect_LI_DF$Machine_Trust_Propensity, method = "pearson")
+```
+
+<br>
+
+#### **DataDoc and Airline**
+
+<br>
+<br>
+```{r Correlation datadoc1, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(DataDoc_HP_DF$TIAS, DataDoc_HP_DF$Behavioural_Measure, method = "pearson")
+cor.test(DataDoc_LP_DF$TIAS, DataDoc_LP_DF$Behavioural_Measure, method = "pearson")
+cor.test(Airline_HI_DF$TIAS, Airline_HI_DF$Behavioural_Measure, method = "pearson")
+cor.test(Airline_LI_DF$TIAS, Airline_LI_DF$Behavioural_Measure, method = "pearson")
+cor.test(DataDoc_HP_DF$TIAS, DataDoc_HP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(DataDoc_LP_DF$TIAS, DataDoc_LP_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Airline_HI_DF$TIAS, Airline_HI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(Airline_LI_DF$TIAS, Airline_LI_DF$Human_Trust_Propensity, method = "pearson")
+cor.test(DataDoc_HP_DF$TIAS, DataDoc_HP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(DataDoc_LP_DF$TIAS, DataDoc_LP_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(Airline_HI_DF$TIAS, Airline_HI_DF$Machine_Trust_Propensity, method = "pearson")
+cor.test(Airline_LI_DF$TIAS, Airline_LI_DF$Machine_Trust_Propensity, method = "pearson")
+```
+
+
+
+### Study 1 - Performance 
+
+<br>
+First table of results represents the r values
+<br>
+Second table of results represents the p values
+<br>
+<br>
+
+**Car**
+<br>
+```{r Correlation car, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_1_Car_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+```
+
+<br>
+**Cell Select**
+<br>
+
+```{r Correlation cellselect, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_1_CellSelect_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+
+```
+
+<br>
+**DataDoc**
+<br>
+
+```{r Correlation DataDoc, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_1_DataDoc_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+
+```
+
+
+### Study 2 - Integrity
+
+<br>
+First table of results represents the r values
+<br>
+Second table of results represents the p values
+<br>
+<br>
+
+**Car**
+<br>
+```{r Correlation car2, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_2_Car_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+
+```
+
+<br>
+**Cell Select**
+<br>
+
+```{r Correlation cellselect2, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_2_CellSelect_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+
+```
+
+
+<br>
+**Airline**
+<br>
+
+
+```{r Correlation Airline2, echo=FALSE, message=FALSE, warning=FALSE}
+
+rcorr(as.matrix(Study_2_Airline_DF[, c('TIAS', 'Human_Trust_Propensity', 'Machine_Trust_Propensity', 'Behavioural_Measure')]),type="pearson")
+
+```
+
+
+
+
+## Regression {.tabset}
+<br>**Analysis 3**<br>
+**Hierarchical Regression**
+
+<br>
+The predictve and divergent validity is assesed through the proportion
+of variance in the behavioural intent measure that is explained by the 
+TIAS scores. 
+<br>
+<b>Research Question:</b>Is the TIAS a valid measure of trust in AI?   <br>
+<b>Research Hypotheses:</b>Thirdly, it is hypothesised that the TIAS 
+scores will be an independent positive predictor of intention to use the system.
+<br><br>
+<b>Hierarchical Regression</b><br> 
+For each AI Application and Condition: <br>
+Dependent variable: Behavioural Intent measure from Condition X - Application X <br>
+Independent variables: Condition X - Application X TIAS Score , 
+Human Trust Propensity, Machine Trust Propensity, 
+Age, Gender, Level of education 
+<br>
+
+### Study 1 - Performance {.tabset}
+<br>
+
+#### Collapsed Regression {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_Study_1=lm(Behavioural_Measure~1,Study_1_Regression_DF)
+model2_Study_1=lm(Behavioural_Measure~Gender,Study_1_Regression_DF)
+model3_Study_1=lm(Behavioural_Measure~Gender + Education,Study_1_Regression_DF)
+model4_Study_1=lm(Behavioural_Measure~Gender + Education + Age,Study_1_Regression_DF)
+model5_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_1_Regression_DF)
+model6_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_1_Regression_DF)
+model7_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_1_Regression_DF)
+
+summary(model2_Study_1)
+standardCoefs(model2_Study_1)
+summary(model3_Study_1)
+standardCoefs(model3_Study_1)
+summary(model4_Study_1)
+standardCoefs(model4_Study_1)
+summary(model5_Study_1)
+standardCoefs(model5_Study_1)
+summary(model6_Study_1)
+standardCoefs(model6_Study_1)
+summary(model7_Study_1)
+standardCoefs(model7_Study_1)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Study_1, model2_Study_1, model3_Study_1, 
+model4_Study_1, model5_Study_1, model6_Study_1, model7_Study_1,
+title = "Collapsed Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_Study_1, model2_Study_1, model3_Study_1, 
+model4_Study_1, model5_Study_1, model6_Study_1, model7_Study_1), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### Car {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_Car_Study_1=lm(Behavioural_Measure~1,Study_1_Car_Regression_DF)
+model2_Car_Study_1=lm(Behavioural_Measure~Gender,Study_1_Car_Regression_DF)
+model3_Car_Study_1=lm(Behavioural_Measure~Gender + Education,Study_1_Car_Regression_DF)
+model4_Car_Study_1=lm(Behavioural_Measure~Gender + Education + Age,Study_1_Car_Regression_DF)
+model5_Car_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_1_Car_Regression_DF)
+model6_Car_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_1_Car_Regression_DF)
+model7_Car_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_1_Car_Regression_DF)
+
+summary(model2_Car_Study_1)
+standardCoefs(model2_Car_Study_1)
+summary(model3_Car_Study_1)
+standardCoefs(model3_Car_Study_1)
+summary(model4_Car_Study_1)
+standardCoefs(model4_Car_Study_1)
+summary(model5_Car_Study_1)
+standardCoefs(model5_Car_Study_1)
+summary(model6_Car_Study_1)
+standardCoefs(model6_Car_Study_1)
+summary(model7_Car_Study_1)
+standardCoefs(model7_Car_Study_1)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Car_Study_1, model2_Car_Study_1, model3_Car_Study_1, 
+model4_Car_Study_1, model5_Car_Study_1, model6_Car_Study_1, model7_Car_Study_1,
+title = "Car Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_Car_Study_1, model2_Car_Study_1, model3_Car_Study_1, 
+model4_Car_Study_1, model5_Car_Study_1, model6_Car_Study_1, model7_Car_Study_1), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### Cell Select {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_CellSelect_Study_1=lm(Behavioural_Measure~1,Study_1_CellSelect_Regression_DF)
+model2_CellSelect_Study_1=lm(Behavioural_Measure~Gender,Study_1_CellSelect_Regression_DF)
+model3_CellSelect_Study_1=lm(Behavioural_Measure~Gender + Education,Study_1_CellSelect_Regression_DF)
+model4_CellSelect_Study_1=lm(Behavioural_Measure~Gender + Education + Age,Study_1_CellSelect_Regression_DF)
+model5_CellSelect_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_1_CellSelect_Regression_DF)
+model6_CellSelect_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_1_CellSelect_Regression_DF)
+model7_CellSelect_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_1_CellSelect_Regression_DF)
+
+summary(model2_CellSelect_Study_1)
+standardCoefs(model2_CellSelect_Study_1)
+summary(model3_CellSelect_Study_1)
+standardCoefs(model3_CellSelect_Study_1)
+summary(model4_CellSelect_Study_1)
+standardCoefs(model4_CellSelect_Study_1)
+summary(model5_CellSelect_Study_1)
+standardCoefs(model5_CellSelect_Study_1)
+summary(model6_CellSelect_Study_1)
+standardCoefs(model6_CellSelect_Study_1)
+summary(model7_CellSelect_Study_1)
+standardCoefs(model7_CellSelect_Study_1)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_CellSelect_Study_1, model2_CellSelect_Study_1, model3_CellSelect_Study_1, 
+model4_CellSelect_Study_1, model5_CellSelect_Study_1, model6_CellSelect_Study_1, model7_CellSelect_Study_1,
+title = "Cell Select Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_CellSelect_Study_1, model2_CellSelect_Study_1, model3_CellSelect_Study_1, 
+model4_CellSelect_Study_1, model5_CellSelect_Study_1, model6_CellSelect_Study_1, model7_CellSelect_Study_1), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### DataDoc {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_DataDoc_Study_1=lm(Behavioural_Measure~1,Study_1_DataDoc_Regression_DF)
+model2_DataDoc_Study_1=lm(Behavioural_Measure~Gender,Study_1_DataDoc_Regression_DF)
+model3_DataDoc_Study_1=lm(Behavioural_Measure~Gender + Education,Study_1_DataDoc_Regression_DF)
+model4_DataDoc_Study_1=lm(Behavioural_Measure~Gender + Education + Age,Study_1_DataDoc_Regression_DF)
+model5_DataDoc_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_1_DataDoc_Regression_DF)
+model6_DataDoc_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_1_DataDoc_Regression_DF)
+model7_DataDoc_Study_1=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_1_DataDoc_Regression_DF)
+
+summary(model2_DataDoc_Study_1)
+standardCoefs(model2_DataDoc_Study_1)
+summary(model3_DataDoc_Study_1)
+standardCoefs(model3_DataDoc_Study_1)
+summary(model4_DataDoc_Study_1)
+standardCoefs(model4_DataDoc_Study_1)
+summary(model5_DataDoc_Study_1)
+standardCoefs(model5_DataDoc_Study_1)
+summary(model6_DataDoc_Study_1)
+standardCoefs(model6_DataDoc_Study_1)
+summary(model7_DataDoc_Study_1)
+standardCoefs(model7_DataDoc_Study_1)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_DataDoc_Study_1, model2_DataDoc_Study_1, model3_DataDoc_Study_1, 
+model4_DataDoc_Study_1, model5_DataDoc_Study_1, model6_DataDoc_Study_1, model7_DataDoc_Study_1,
+title = "DataDoc Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_DataDoc_Study_1, model2_DataDoc_Study_1, model3_DataDoc_Study_1, 
+model4_DataDoc_Study_1, model5_DataDoc_Study_1, model6_DataDoc_Study_1, model7_DataDoc_Study_1), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+
+### Study 2 - Integrity {.tabset}
+<br>
+
+#### Collapsed Regression {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_Study_2=lm(Behavioural_Measure~1,Study_2_Regression_DF)
+model2_Study_2=lm(Behavioural_Measure~Gender,Study_2_Regression_DF)
+model3_Study_2=lm(Behavioural_Measure~Gender + Education,Study_2_Regression_DF)
+model4_Study_2=lm(Behavioural_Measure~Gender + Education + Age,Study_2_Regression_DF)
+model5_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_2_Regression_DF)
+model6_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_2_Regression_DF)
+model7_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_2_Regression_DF)
+
+summary(model2_Study_1)
+standardCoefs(model2_Study_2)
+summary(model3_Study_2)
+standardCoefs(model3_Study_2)
+summary(model4_Study_2)
+standardCoefs(model4_Study_2)
+summary(model5_Study_2)
+standardCoefs(model5_Study_2)
+summary(model6_Study_2)
+standardCoefs(model6_Study_2)
+summary(model7_Study_2)
+standardCoefs(model7_Study_2)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Study_2, model2_Study_2, model3_Study_2, 
+model4_Study_2, model5_Study_2, model6_Study_2, model7_Study_2,
+title = "Collapsed Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_Study_2, model2_Study_2, model3_Study_2, 
+model4_Study_2, model5_Study_2, model6_Study_2, model7_Study_2), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### Car {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_Car_Study_2=lm(Behavioural_Measure~1,Study_2_Car_Regression_DF)
+model2_Car_Study_2=lm(Behavioural_Measure~Gender,Study_2_Car_Regression_DF)
+model3_Car_Study_2=lm(Behavioural_Measure~Gender + Education,Study_2_Car_Regression_DF)
+model4_Car_Study_2=lm(Behavioural_Measure~Gender + Education + Age,Study_2_Car_Regression_DF)
+model5_Car_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_2_Car_Regression_DF)
+model6_Car_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_2_Car_Regression_DF)
+model7_Car_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_2_Car_Regression_DF)
+
+summary(model2_Car_Study_2)
+standardCoefs(model2_Car_Study_2)
+summary(model3_Car_Study_2)
+standardCoefs(model3_Car_Study_2)
+summary(model4_Car_Study_2)
+standardCoefs(model4_Car_Study_2)
+summary(model5_Car_Study_2)
+standardCoefs(model5_Car_Study_2)
+summary(model6_Car_Study_2)
+standardCoefs(model6_Car_Study_2)
+summary(model7_Car_Study_2)
+standardCoefs(model7_Car_Study_2)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Car_Study_2, model2_Car_Study_2, model3_Car_Study_2, 
+model4_Car_Study_2, model5_Car_Study_2, model6_Car_Study_2, model7_Car_Study_2,
+title = "Car Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_Car_Study_2, model2_Car_Study_2, model3_Car_Study_2, 
+model4_Car_Study_2, model5_Car_Study_2, model6_Car_Study_2, model7_Car_Study_2), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### Cell Select {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_CellSelect_Study_2=lm(Behavioural_Measure~1,Study_2_CellSelect_Regression_DF)
+model2_CellSelect_Study_2=lm(Behavioural_Measure~Gender,Study_2_CellSelect_Regression_DF)
+model3_CellSelect_Study_2=lm(Behavioural_Measure~Gender + Education,Study_2_CellSelect_Regression_DF)
+model4_CellSelect_Study_2=lm(Behavioural_Measure~Gender + Education + Age,Study_2_CellSelect_Regression_DF)
+model5_CellSelect_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_2_CellSelect_Regression_DF)
+model6_CellSelect_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_2_CellSelect_Regression_DF)
+model7_CellSelect_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_2_CellSelect_Regression_DF)
+
+summary(model2_CellSelect_Study_2)
+standardCoefs(model2_CellSelect_Study_2)
+summary(model3_CellSelect_Study_2)
+standardCoefs(model3_CellSelect_Study_2)
+summary(model4_CellSelect_Study_2)
+standardCoefs(model4_CellSelect_Study_2)
+summary(model5_CellSelect_Study_2)
+standardCoefs(model5_CellSelect_Study_2)
+summary(model6_CellSelect_Study_2)
+standardCoefs(model6_CellSelect_Study_2)
+summary(model7_CellSelect_Study_2)
+standardCoefs(model7_CellSelect_Study_2)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_CellSelect_Study_2, model2_CellSelect_Study_2, model3_CellSelect_Study_2, 
+model4_CellSelect_Study_2, model5_CellSelect_Study_2, model6_CellSelect_Study_2, model7_CellSelect_Study_2,
+title = "Cell Select Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_CellSelect_Study_2, model2_CellSelect_Study_2, model3_CellSelect_Study_2, 
+model4_CellSelect_Study_2, model5_CellSelect_Study_2, model6_CellSelect_Study_2, model7_CellSelect_Study_2), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+#### Airline {.tabset}
+
+##### Regression Models 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1_Airline_Study_2=lm(Behavioural_Measure~1,Study_2_Airline_Regression_DF)
+model2_Airline_Study_2=lm(Behavioural_Measure~Gender,Study_2_Airline_Regression_DF)
+model3_Airline_Study_2=lm(Behavioural_Measure~Gender + Education,Study_2_Airline_Regression_DF)
+model4_Airline_Study_2=lm(Behavioural_Measure~Gender + Education + Age,Study_2_Airline_Regression_DF)
+model5_Airline_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity,Study_2_Airline_Regression_DF)
+model6_Airline_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity,Study_2_Airline_Regression_DF)
+model7_Airline_Study_2=lm(Behavioural_Measure~Gender + Education + Age + Machine_Trust_Propensity + Human_Trust_Propensity + TIAS,Study_2_Airline_Regression_DF)
+
+summary(model2_Airline_Study_2)
+standardCoefs(model2_Airline_Study_2)
+summary(model3_Airline_Study_2)
+standardCoefs(model3_Airline_Study_2)
+summary(model4_Airline_Study_2)
+standardCoefs(model4_Airline_Study_2)
+summary(model5_Airline_Study_2)
+standardCoefs(model5_Airline_Study_2)
+summary(model6_Airline_Study_2)
+standardCoefs(model6_Airline_Study_2)
+summary(model7_Airline_Study_2)
+standardCoefs(model7_Airline_Study_2)
+
+```
+
+##### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Airline_Study_2, model2_Airline_Study_2, model3_Airline_Study_2, 
+model4_Airline_Study_2, model5_Airline_Study_2, model6_Airline_Study_2, model7_Airline_Study_2,
+title = "Airline Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+#ANOVA between models
+tab_df(anova(model1_Airline_Study_2, model2_Airline_Study_2, model3_Airline_Study_2, 
+model4_Airline_Study_2, model5_Airline_Study_2, model6_Airline_Study_2, model7_Airline_Study_2), 
+title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+
+
+## Factor Analysis {.tabset}
+
+### Study 1 - Performance {.tabset}
+
+#### Suitability Checks
+<br>
+**Kaiser-Meyer-Olkin (KMO) (should be > ~.5 or .6) 
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+KMO(TIAS_Items_Study_1_DF)
+
+```
+<br>
+Bartlett's test of sphericity (should be significant)**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+bart_spher(TIAS_Items_Study_1_DF)
+
+```
+<br>
+Correlation matrix between TIAS items and calculated Eigenvalues
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+corResults <- cor(TIAS_Items_Study_1_DF, use = "pairwise.complete.obs")
+eigenvals <- eigen(corResults)
+eigenvals$values
+```
+<br>
+Parallel Analysis Scree Plots are a great way to tell factors. 
+<br>
+Changes in gradient indicate factors
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fa.parallel(TIAS_Items_Study_1_DF)
+
+```
+
+
+
+
+
+#### FA Output
+<br>
+**Initial FA run as 1 factor per item**
+ ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+y <- fa(TIAS_Items_Study_1_DF, nfactors = 12, rotate = "oblimin", fm="ml", n.iter=25)
+print.psych(y, sort = TRUE)
+fa.diagram(y, main="Study 1 Initial FA Output")
+
+ ```
+
+<br>
+**FA run as X number of factors determined by Kaiser's rule and parallel analysis scree plot**
+<br>
+Kaiser's rule is simply to retain 
+factors whose eigenvalues are > 1 
+<br>
+(Kaiser's rule is based on the 
+assumption that to retain a factor that 
+explains less variance than a single 
+original variable is not psychometrically
+ reasonable.) 
+ <br>
+ ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+zoo <- fa(TIAS_Items_Study_1_DF, nfactors = 2, rotate = "oblimin", fm="ml", n.iter=25)
+print.psych(zoo, sort = TRUE)
+fa.diagram(zoo, main="Study 1 FA Output")
+
+ ```
+
+#### Cronbach's Alpha
+
+<br>
+**Factor 1**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_1_DF[,c(1,2,3,5)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+<br>
+**Factor 2**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_1_DF[,c(4,6,7,8,9,10,11,12)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+<br>
+**All items**
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_1_DF[,c(1,2,3,4,5,6,7,8,9,10,11,12)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+
+
+
+
+### Study 2 - Intergrity {.tabset}
+
+#### Suitability Checks
+<br>
+**Kaiser-Meyer-Olkin (KMO) (should be > ~.5 or .6) 
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+KMO(TIAS_Items_Study_2_DF)
+
+```
+<br>
+Bartlett's test of sphericity (should be significant)**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+bart_spher(TIAS_Items_Study_2_DF)
+
+```
+<br>
+Correlation matrix between TIAS items and calculated eigenvalues for factors
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+corResults <- cor(TIAS_Items_Study_2_DF, use = "pairwise.complete.obs")
+eigenvals <- eigen(corResults)
+eigenvals$values
+```
+<br>
+Parallel Analysis Scree Plots are a great way to tell factors. 
+<br>
+Changes in gradient indicate factors
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fa.parallel(TIAS_Items_Study_2_DF)
+
+```
+
+
+#### FA Output
+<br>
+**Initial FA run as 1 factor per item**
+ ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+y <- fa(TIAS_Items_Study_2_DF, nfactors = 12, rotate = "oblimin", fm="ml", n.iter=25)
+print.psych(y, sort = TRUE)
+fa.diagram(y, main="Study 2 Initial FA Output")
+
+ ```
+
+<br>
+**FA run as X number of factors determined by Kaiser's rule and parallel analysis scree plot**
+<br>
+Kaiser's rule is simply to retain 
+factors whose eigenvalues are > 1 
+<br>
+(Kaiser's rule is based on the 
+assumption that to retain a factor that 
+explains less variance than a single 
+original variable is not psychometrically
+ reasonable.) 
+ <br>
+ ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+y <- fa(TIAS_Items_Study_2_DF, nfactors = 2, rotate = "oblimin", fm="ml", n.iter=25)
+print.psych(y, sort = TRUE)
+fa.diagram(y, main="Study 2 FA Output")
+
+install.packages("lavaan")
+library(lavaan)
+
+# Define your CFA model
+model <- 
+   'factor1 =~ TiAS_1 + TiAS_2 + TiAS_3 + TiAS_4 + TiAS_5
+   factor2 =~ TiAS_6 + TiAS_7 + TiAS_8 + TiAS_9 + TiAS_10 + TiAS_11 + TiAS_12'
+
+# Fit the CFA model
+fit <- cfa(model, data = TIAS_Items_Study_2_DF)
+
+# Print the results
+summary(fit)
+
+
+
+ ```
+
+#### Cronbach's Alpha
+
+<br>
+
+**Factor 1**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_2_DF[,c(1,2,3,5)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+<br>
+**Factor 2**
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_2_DF[,c(4,6,7,8,9,10,11,12)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+<br>
+**All items**
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+psych::alpha(TIAS_Items_Study_2_DF[,c(1,2,3,4,5,6,7,8,9,10,11,12)], 
+               na.rm=TRUE, 
+               check.keys=TRUE,
+               n.iter=1,use="pairwise",
+               warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+```
+
+<br>
+**Behvaiuoral study 1**
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+install.packages("ltm")
+library(ltm)
+
+# Specify the column indices to extract
+columns <- c(30, 31, 32)
+
+# Create a new dataframe Study_1_Cronbach
+Study_1_Cronbach <- data.frame()
+
+# Iterate over the dataframes and extract the specified columns
+dataframes <- list(Study_1_Car_DF, Study_1_CellSelect_DF, Study_1_DataDoc_DF)
+for (df in dataframes) {
+  # Create a temporary dataframe to hold the extracted column values
+  temp_df <- data.frame(matrix(nrow = 0, ncol = length(columns))) # Create an empty dataframe with the required number of columns
+
+  # Iterate over the specified columns
+  for (i in 1:length(columns)) {
+    col <- columns[i]
+
+    # Extract the column values and exclude NA or invalid values
+    column_values <- df[, col]
+    column_values <- column_values[complete.cases(column_values)]
+
+    # Append the column values to the temporary dataframe
+    temp_df <- rbind(temp_df, column_values)
+  }
+
+  # Append the temporary dataframe to the Study_1_Cronbach dataframe
+  Study_1_Cronbach <- rbind(Study_1_Cronbach, temp_df)
+}
+
+# Rename the columns in the Study_1_Cronbach dataframe
+colnames(Study_1_Cronbach) <- c("Column_1", "Column_2", "Column_3")
+
+# Assuming you already have a dataframe named 'Study_1_Cronbach'
+
+# Get the number of columns in the dataframe
+num_cols <- ncol(Study_1_Cronbach)
+
+# Create a new dataframe to store the stacked columns
+stacked_df <- data.frame()
+
+# Iterate over the columns in groups of three
+for (i in seq(1, num_cols, 3)) {
+  # Select the current group of three columns
+  group <- Study_1_Cronbach[, i:(i+2)]
+  
+  # Rename the columns to ensure unique names
+  colnames(group) <- paste0("Column_", seq_along(group))
+  
+  # Add the group of columns to the stacked dataframe
+  stacked_df <- rbind(stacked_df, group)
+}
+
+# Print the stacked dataframe
+print(stacked_df)
+
+
+cronbach.alpha(stacked_df[,c(1,2,3)])
+
+```
+<br>
+**Behvaiuoral study 2**
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+#psych::alpha(Study_2_DF[,c(24,25,26,27,28,29,30,31,32)], 
+ #              na.rm=TRUE, 
+  #             check.keys=TRUE,
+   #            n.iter=1,use="pairwise",
+    #           warnings=TRUE) #check.keys automatically reverses reverse scored items
+
+
+
+## Statistical Assumption Tests {.tabset}
+
+### Study 1 - Performance {.tabset}
+
+#### Normality
+```{r This Might Work1, echo=FALSE, message=FALSE, warning=FALSE}
+
+dataframes <- c("Car_HP_DF", "Car_LP_DF", "CellSelect_HP_DF", "CellSelect_LP_DF", "DataDoc_HP_DF", "DataDoc_LP_DF")
+columns <- c("TIAS", "Behavioural_Measure", "Human_Trust_Propensity", "Machine_Trust_Propensity")
+results <- data.frame(dataframe = character(), column = character(), p = numeric())
+
+for (df in dataframes) {
+  for (col in columns) {
+    test_result <- shapiro.test(get(df)[,col])
+    results <- rbind(results, data.frame(dataframe = df, column = col, p = test_result$p.value))
+  }
+}
+formattable(results, align =c("c"), list(
+ area(col=3) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p` < 0.05, "#ff0000","#0afd0a"), 
+                                font.weight = ifelse(`p` < 0.05, "bold", "normal"))),
+                                     table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+```
+#### Homogeneity of Variance
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+bartlett.test(TIAS ~ Condition, data= Study_1_Car_DF)
+bartlett.test(TIAS ~ Condition, data= Study_1_CellSelect_DF)
+bartlett.test(TIAS ~ Condition, data= Study_1_DataDoc_DF)
+
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_1_Car_DF)
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_1_CellSelect_DF)
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_1_DataDoc_DF)
+
+```
+
+#### Regression Assumptions {.tabset}
+
+##### Linearity
+
+<br>
+**Linearity of TIAS Score**
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+TIAS_BI_Linearity<- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("TIAS Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+TIAS_BI_Linearity
+
+```
+<br>
+<br>
+<br>
+
+**Linearity of Human Trust Propensity Score**
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+HTP_BI_Linearity<- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = Human_Trust_Propensity, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("Human Trust Propensity Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+HTP_BI_Linearity
+
+```
+<br>
+<br>
+<br>
+
+**Linearity of Machine Trust Propensity Score**
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+MTP_BI_Linearity<- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = Machine_Trust_Propensity, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("Machine Trust Propensity Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+MTP_BI_Linearity
+
+```
+
+
+
+
+
+
+
+##### Multicolinearity 
+
+<br>
+VIF values <5 required
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+models <- list(model7_Study_1, model7_Car_Study_1, model7_CellSelect_Study_1, 
+               model7_DataDoc_Study_1)
+
+model_names <- c("Collapsed Regression Study 1", "Car Regression Study 1", "Cell Select Regression Study 1", 
+               "DataDoc Regression Study 1")
+
+# Create a list to store the VIF values for each model
+vif_values_list <- list()
+
+# Loop through each model in the list
+for (i in 1:length(models)) {
+  # Calculate the VIF values for each model
+  vif_values <- vif(models[[i]])
+  # Add the VIF values to the list
+  vif_values_list[[i]] <- vif_values
+  # Print the model name and the VIF values
+  cat(model_names[i], "VIF values: ", vif_values, "\n")
+}
+
+# Set a threshold for the VIF values
+threshold <- 5
+
+# Loop through each model in the list
+for (i in 1:length(models)) {
+  # Get the VIF values for the current model
+  vif_values <- vif_values_list[[i]]
+  # Find the variables with VIF values above the threshold
+  high_vif_vars <- names(vif_values)[vif_values > threshold]
+  # Print the model name and the variables with high VIF values
+  cat(model_names[i], ": Variables with VIF >", threshold, ": ", high_vif_vars, "\n")
+}
+
+
+
+```
+
+##### Independence of Errors
+<br>
+We want that statistic to be as close to 2 as possible, and generally anything between 1 and 3 is fine.
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+models <- list(model7_Study_1, model7_Car_Study_1, model7_CellSelect_Study_1, 
+               model7_DataDoc_Study_1)
+
+model_names <- c("Collapsed Regression Study 1", "Car Regression Study 1", "Cell Select Regression Study 1", 
+               "DataDoc Regression Study 1")
+
+dw_stats_list <- list()
+for (i in 1:length(models)) {
+    dw_stats_list[[i]] <- durbinWatsonTest(models[[i]])
+}
+
+for (i in 1:length(models)){
+    output <- durbinWatsonTest(models[[i]])
+    print(output)
+}
+    
+```
+
+##### Normality of Residuals
+<br>
+PP plots
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+models <- list(model7_Study_1, model7_Car_Study_1, model7_CellSelect_Study_1, 
+               model7_DataDoc_Study_1)
+
+model_names <- c("Collapsed Regression Study 1", "Car Regression Study 1", "Cell Select Regression Study 1", 
+               "DataDoc Regression Study 1")
+
+residuals_list <- list()
+for (i in 1:length(models)) {
+    residuals_list[[i]] <- resid(models[[i]])
+}
+
+par(mfrow = c(2, 2))  #This just sets the plots on the page to 2x2
+for (i in 1:length(models)){
+    pp.plot(residuals_list[[i]], main = model_names[i])
+}
+
+```
+
+##### Homoscedasticity 
+
+<br>
+Random distribution of points is required. Funelling indicates the homoscedasticity assumption is violated.
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+models <- list(model7_Study_1, model7_Car_Study_1, model7_CellSelect_Study_1, model7_DataDoc_Study_1)
+model_names <- c("Collapsed Regression Study 1", "Car Regression Study 1", "Cell Select Regression Study 1", "DataDoc Regression Study 1")
+
+par(mfrow = c(2, 2))
+for (i in 1:length(models)) {
+    pred_values <- predict(models[[i]])
+    resid_std <- rstandard(models[[i]])
+    plot(pred_values, resid_std, main = model_names[i], xlab = "Predicted Values", ylab = "Standardized Residuals")
+}
+
+```
+
+
+
+### Study 2 - Integrity {.tabset}
+
+#### Normality
+```{r This Might Work2, echo=FALSE, message=FALSE, warning=FALSE}
+
+dataframes <- c("Car_HI_DF", "Car_LI_DF", "CellSelect_HI_DF", "CellSelect_LI_DF", "Airline_HI_DF", "Airline_LI_DF")
+columns <- c("TIAS", "Behavioural_Measure", "Human_Trust_Propensity", "Machine_Trust_Propensity")
+results <- data.frame(dataframe = character(), column = character(), p = numeric())
+
+for (df in dataframes) {
+  for (col in columns) {
+    test_result <- shapiro.test(get(df)[,col])
+    results <- rbind(results, data.frame(dataframe = df, column = col, p = test_result$p.value))
+  }
+}
+formattable(results, align =c("c"), list(
+ area(col=3) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p` < 0.05, "#ff0000","#0afd0a"), 
+                                font.weight = ifelse(`p` < 0.05, "bold", "normal"))),
+                                     table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+
+```
+
+#### Homogeneity of Variance
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+bartlett.test(TIAS ~ Condition, data= Study_2_Car_DF)
+bartlett.test(TIAS ~ Condition, data= Study_2_CellSelect_DF)
+bartlett.test(TIAS ~ Condition, data= Study_2_Airline_DF)
+
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_2_Car_DF)
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_2_CellSelect_DF)
+bartlett.test(Behavioural_Measure ~ Condition, data= Study_2_Airline_DF)
+
+```
+
+#### Regression Assumptions {.tabset}
+
+##### Linearity
+
+<br>
+**Linearity of TIAS Score**
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+TIAS_BI_Linearity<- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("TIAS Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+TIAS_BI_Linearity
+
+```
+<br>
+<br>
+<br>
+
+**Linearity of Human Trust Propensity Score**
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+HTP_BI_Linearity<- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = Human_Trust_Propensity, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("Human Trust Propensity Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+HTP_BI_Linearity
+
+```
+<br>
+<br>
+<br>
+
+**Linearity of Machine Trust Propensity Score**
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+MTP_BI_Linearity<- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = Machine_Trust_Propensity, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  theme()+ 
+  ylab("Behavioural Intention Score") + 
+  xlab("Machine Trust Propensity Score") + 
+  ylim(0,7) +
+  xlim(0,7)
+
+MTP_BI_Linearity
+
+```
+
+##### Multicolinearity 
+
+<br>
+VIF values <5 required
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+models <- list(model7_Study_2, model7_Car_Study_2, model7_CellSelect_Study_2, 
+               model7_Airline_Study_2)
+
+model_names <- c("Collapsed Regression Study 2", "Car Regression Study 2", 
+               "Cell Select Regression Study 2", "Airline Regression Study 2")
+
+
+# Create a list to store the VIF values for each model
+vif_values_list <- list()
+
+# Loop through each model in the list
+for (i in 1:length(models)) {
+  # Calculate the VIF values for each model
+  vif_values <- vif(models[[i]])
+  # Add the VIF values to the list
+  vif_values_list[[i]] <- vif_values
+  # Print the model name and the VIF values
+  cat(model_names[i], "VIF values: ", vif_values, "\n")
+}
+
+# Set a threshold for the VIF values
+threshold <- 5
+
+# Loop through each model in the list
+for (i in 1:length(models)) {
+  # Get the VIF values for the current model
+  vif_values <- vif_values_list[[i]]
+  # Find the variables with VIF values above the threshold
+  high_vif_vars <- names(vif_values)[vif_values > threshold]
+  # Print the model name and the variables with high VIF values
+  cat(model_names[i], ": Variables with VIF >", threshold, ": ", high_vif_vars, "\n")
+}
+
+
+```
+
+
+##### Independence of Errors
+
+<br>
+We want that statistic to be as close to 2 as possible, and generally anything between 1 and 3 is fine.
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+models <- list(model7_Study_2, model7_Car_Study_2, model7_CellSelect_Study_2, 
+               model7_Airline_Study_2)
+
+model_names <- c("Collapsed Regression Study 2", "Car Regression Study 2", 
+               "Cell Select Regression Study 2", "Airline Regression Study 2")
+
+dw_stats_list <- list()
+for (i in 1:length(models)) {
+    dw_stats_list[[i]] <- durbinWatsonTest(models[[i]])
+}
+
+for (i in 1:length(models)){
+    output <- durbinWatsonTest(models[[i]])
+    print(output)
+}
+    
+```
+
+##### Normality of Residuals
+<br>
+PP plots
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+models <- list(model7_Study_2, model7_Car_Study_2, model7_CellSelect_Study_2, 
+               model7_Airline_Study_2)
+
+model_names <- c("Collapsed Regression Study 2", "Car Regression Study 2", 
+               "Cell Select Regression Study 2", "Airline Regression Study 2")
+
+residuals_list <- list()
+for (i in 1:length(models)) {
+    residuals_list[[i]] <- resid(models[[i]])
+}
+
+par(mfrow = c(2, 2))  #This just sets the plots on the page to 2x2
+for (i in 1:length(models)){
+    pp.plot(residuals_list[[i]], main = model_names[i])
+}
+
+```
+
+##### Homoscedasticity 
+
+<br>
+Random distribution of points is required. Funelling indicates the homoscedasticity assumption is violated.
+<br>
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+models <- list(model7_Study_2, model7_Car_Study_2, model7_CellSelect_Study_2, 
+               model7_Airline_Study_2)
+
+model_names <- c("Collapsed Regression Study 2", "Car Regression Study 2", 
+               "Cell Select Regression Study 2", "Airline Regression Study 2")
+
+par(mfrow = c(2, 2))
+for (i in 1:length(models)) {
+    pred_values <- predict(models[[i]])
+    resid_std <- rstandard(models[[i]])
+    plot(pred_values, resid_std, main = model_names[i], xlab = "Predicted Values", ylab = "Standardized Residuals")
+}
+
+```
+
+
+### Histograms {.tabset}
+
+#### Trust
+
+**Trust Scale Score Frequency**
+
+```{r Histograms1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Car_Trust_Histogram <- ggplot(data = Car_DF, 
+                   mapping = aes(x = TIAS,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Car") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+  xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+
+CellSelect_Trust_Histogram <- ggplot(data = CellSelect_DF, 
+                   mapping = aes(x = TIAS,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "CellSelect") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+ xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+DataDoc_Trust_Histogram <- ggplot(data = DataDoc_DF, 
+                   mapping = aes(x = TIAS,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "DataDoc") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+ xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Airline_Trust_Histogram <- ggplot(data = Airline_DF, 
+                   mapping = aes(x = TIAS,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Airline") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+  xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+TIAS_Histogram <- ggarrange(Car_Trust_Histogram, CellSelect_Trust_Histogram, DataDoc_Trust_Histogram,
+                            Airline_Trust_Histogram, ncol = 2, nrow = 2)
+TIAS_Histogram
+
+
+```
+
+#### Behavioural Measure
+**Behavioural Intention Measure Score Frequency**
+
+```{r Histograms2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_Behaviour_Histogram <- ggplot(data = Car_DF, 
+                   mapping = aes(x = Behavioural_Measure,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Car") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Behaviour Scores") + 
+  xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+  
+CellSelect_Behaviour_Histogram <- ggplot(data = CellSelect_DF, 
+                   mapping = aes(x = Behavioural_Measure,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "CellSelect") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Behaviour Scores") + 
+  xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+  
+  
+DataDoc_Behaviour_Histogram <- ggplot(data = DataDoc_DF, 
+                   mapping = aes(x = Behavioural_Measure,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "DataDoc") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Behaviour Scores") + 
+ xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+  
+Airline_Behaviour_Histogram <- ggplot(data = Airline_DF, 
+                   mapping = aes(x = Behavioural_Measure,
+                                 fill = Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Airline") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Behaviour Scores") + 
+ xlim(0, 7) +
+  ylim(0, 60) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+
+Behvaiour_Histogram <- ggarrange(Car_Behaviour_Histogram, CellSelect_Behaviour_Histogram, DataDoc_Behaviour_Histogram,
+                            Airline_Behaviour_Histogram, ncol = 2, nrow = 2)
+Behvaiour_Histogram
+
+```
+
+
+
+## Summary {.tabset}
+
+### Analysis Summary
+
+<br>
+**T test assumptions not met**
+<br>
+Study 1: DataDoc Normality Violated, Car Homogeneity of Variance Violated
+<br>
+Study 2: Airline Homogeneity of Variance Violated
+<br>
+<br>
+**Regression assumptions not met**
+<br>
+Study 1: Linearity of both trust propensity scores not clear
+<br>
+Study 2: Linearity of both trust propensity scores not clear
+<br>
+<br>
+<br>
+<br>
+
+#### **Analysis 1 - T Tests**
+<br>
+<br>
+
+One-tailed T-Tests with Bonferroni Corrections
+<br>
+<br>
+
+All TIAS scores between high/low performance conditions of each application were **significant (p<0.0001)**
+<br>
+All TIAS scores between high/low integrity conditions of each application were **significant (p<0.0001)**
+<br>
+<br>
+<br>
+
+#### **Analysis 2 - Correlations** 
+<br>
+<br>
+![](CorSplit.PNG)
+<br>
+<br>
+<br>
+![](CorSplit2.PNG)
+<br>
+<br>
+
+
+#### **Analysis 3 - Regression**
+<br>
+<br>
+
+Study 1 - Collapsed Regression Overview
+<br>
+```{r CollapsedComparison, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Study_1, model2_Study_1, model3_Study_1, 
+model4_Study_1, model5_Study_1, model6_Study_1, model7_Study_1,
+title = "Collapsed Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+```
+<br>
+<br>
+<br>
+
+Study 2 - Collapsed Regression Overview
+<br>
+```{r CollapsedComparison2, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1_Study_2, model2_Study_2, model3_Study_2, 
+model4_Study_2, model5_Study_2, model6_Study_2, model7_Study_2,
+title = "Collapsed Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+```
+
+<br>
+<br>
+<br>
+
+#### **Analysis 4**
+<br>
+Number of factors found in TIAS items = 2
+<br>
+<br>
+
+**Study 1**
+<br>
+<br>
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+fa.diagram(zoo, main="Study 1 FA Output")
+
+```
+<br>
+<br>
+
+**Study 2**
+<br>
+<br> 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fa.diagram(y, main="Study 2 FA Output")
+
+```
+<br>
+<br>
+**Cronbach's alpha estimates for TIAS scale**
+<br>
+<br>
+Study 1:     alpha = 0.94
+<br>
+Study 2:     alpha = 0.94
+<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+
+### Study 1 Figures
+
+
+```{r Study 1T1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Study_1_Figure1 <- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  facet_grid(~AI_Application)+
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median   .......... Mean") +
+  theme() +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Study_1_Figure1
+
+```
+
+```{r Study 1T2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Study_1_Figure2 <- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  facet_grid(~AI_Application)+
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Measure") + 
+  xlab("Condition") +
+  ggtitle(label = "Behavioural Intention Between Manipulation Conditions") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median   .......... Mean") +
+  theme() +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Study_1_Figure2
+
+```
+
+```{r Study 1T3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_TIAS_Behaviour_scatter1<- ggplot(data = Study_1_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Intentions Scores") +
+  labs(tag = "Figure 3") +
+  theme()+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+Car_TIAS_Behaviour_scatter1
+
+```
+
+### Study 2 Figures
+
+
+```{r Study 2T1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Study_2_Figure1 <- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = TIAS, 
+                                 fill = Condition) 
+                   ) +
+  facet_grid(~AI_Application)+
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median   .......... Mean") +
+  theme() +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Study_2_Figure1
+
+```
+
+```{r Study 2T2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+TIAS_Study_2_Figure2 <- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Behavioural_Measure, 
+                                 fill = Condition) 
+                   ) +
+  facet_grid(~AI_Application)+
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Behavioural Measure") + 
+  xlab("Condition") +
+  ggtitle(label = "Behavioural Intention Between Manipulation Conditions") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median   .......... Mean") +
+  theme() +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+TIAS_Study_2_Figure2
+
+```
+
+```{r Study 2T3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Car_TIAS_Behaviour_scatter2<- ggplot(data = Study_2_DF,  
+                   mapping = aes(x = TIAS, 
+                                 y = Behavioural_Measure,
+                                 colour = Condition) 
+                   ) +
+  facet_grid(AI_Application~.)+
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual TIAS Score Against Behvaioural Intentions Scores") +
+  labs(tag = "Figure 3") +
+  theme()+ 
+  ylab("Behavioural Score") + 
+  xlab("Trust Score") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+Car_TIAS_Behaviour_scatter2
+
+```
+
+
+### Factors and TIAS Items
+
+<br>
+<br>
+![](Study 1 FA output.PNG)
+<br>
+<br>
+![](Study 2 FA output.PNG)
+
+### Human vs Machine Trust Propensity {.tabset}
+
+
+<br>
+"Users who distrust other humans tend to be more positive toward machines" (Molina and Sundar 2022)
+<br>
+<br>
+
+#### Figures
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Human_Vs_Machine <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Condition,
+                                 y = Human_Trust_Propensity, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("HTP") + 
+  xlab("Condition") +
+  ggtitle(label = "Human Trust Propensity") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median") +
+  theme( ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+
+Human_Vs_Machine2 <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Condition, 
+                                 y = Machine_Trust_Propensity, 
+                                 fill = Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("MTP") + 
+  xlab("Condition") +
+  ggtitle(label = "Machine Trust Propensity") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median") +
+  theme() +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+hvm <- ggarrange(Human_Vs_Machine, Human_Vs_Machine2, ncol = 1, nrow = 2)
+hvm
+
+```
+
+```{r Scatt392193, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+MTP_VS_HTP<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Human_Trust_Propensity, 
+                                 y = Machine_Trust_Propensity
+                                ) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "MTP Vs HTP") +
+  labs(tag = "Figure 1") +
+  theme()+ 
+  ylab("MTP") + 
+  xlab("HTP") + 
+  xlim(0, 7) + 
+  ylim(0, 7) 
+
+MTP_VS_HTP
+```
+
+#### Analyses
+
+<br>
+<br>
+
+**Correlation Between Human and Machine Trust Propensity**
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+cor.test(Qualtrics_DF$Human_Trust_Propensity, Qualtrics_DF$Machine_Trust_Propensity, method = "pearson")
+
+```
+<br>
+<br>
+**T test between HTP and MTP**
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(Qualtrics_DF$Human_Trust_Propensity, Qualtrics_DF$Machine_Trust_Propensity, 
+ alternative = "two.sided")
+```
+
+<br>
+<br>
+**Linear Regression between MTP and HTP**
+```{r}
+summary(lm(Machine_Trust_Propensity ~ Human_Trust_Propensity, data = Qualtrics_DF))
+```
+
+
+## Written Summary
+<br> 
+<br>
+The study aimed to investigate the Jian et al TIAS scale across various AI applications,
+ and examine the validity, reliability, and generalizability of the 
+ TIAS measure.
+
+**Analysis 1: One-Tailed T-Tests with Bonferroni Corrections**
+
+The study's first hypothesis was that the TIAS scores of the high performance/integrity conditions will be significantly higher than the low performance/integrity conditions for each AI application. To test this, we conducted one-tailed T-tests with Bonferroni corrections between the TIAS distributions of the high/low conditions for each application. The results showed that all TIAS scores between high/low performance conditions of each application were significant (p<0.0001), and all TIAS scores between high/low integrity conditions of each application were significant (p<0.0001). This supports the hypothesis and shows that the manipulation had the intended effect. It also shows that the scale is moving as expected for all three applications.
+
+**Meeting notes:** We were all satisfied that our manipulation had worked.
+
+
+**Analysis 2: The Convergent Validity of the TIAS with Other Similar Measures**
+
+The study's second hypothesis was that there will be a positive association between the TIAS scores and the Human Trust Propensity scale and the Machine Trust Propensity scale. To test this, we conducted correlation analyses between the TIAS scores and the Human Trust Propensity Scale, the Machine Trust Propensity Scale, and the Behavioural Intent measure. The results showed that all correlations between the TIAS and Behavioural Intent were greater than 0.8 and all significant. Correlations between collapsed TiAS scores and Machine Trust Propensity Scores were mixed, and many were not significant, though some were as expected. However, when split by high and low conditions, correlations between the high condition Machine Trust Propensity Scores and TIAS scores were between 0.4 and 0.66 and significant for all applications in both studies. Correlations between the low conditions Machine Trust Propensity Score and the TIAS scores were between -0.1-0.45 and had mixed significance between applications. All correlations between the Human Trust Propensity Scores and the TIAS were between -0.02-0.35 and had mixed significance between applications. The results from the correlations support the second hypothesis, showing adequate positive association between the TIAS scores and the Human Trust Propensity Scale and the Machine Trust Propensity Scale. 
+
+**Meeting notes:** Discussing whether it is worth reporting the correlations as collapsed and justifying them being slightly weaker than suggested by the literature and using non-significant p-values. OR Reporting the correlations split by condition, therefore reporting twice as many but having to provide justification for why the data looks different between the high and low conditions and why the low condition does not correlate in most cases.
+
+We also discussed the implications of not finding the human trust propensity score correlations as suggested by the literature, implying that human trust propensity may not be as relevant for trust in machines or may be pulled in different directions.
+
+
+**Analysis 3: Predictive Validity of TIAS**
+
+The study's third hypothesis was that the TIAS scores will be an independent positive predictor of behavioural intention to use the system. To test this, we conducted hierarchical regression analyses. The behavioural intent measure was used as the dependent variable and the TIAS scores, Human Trust Propensity scores, Machine Trust Propensity scores, Age, Gender, and Level of education as independent variables. The results showed that the TIAS scores explained a significant proportion of variance in the behavioural intent measure in every model between applications. The variance explained by the TIAS Score in all regressions was between than 66%-82%. This supports the hypothesis that the TIAS scores will be an independent positive predictor of intention to use the system.
+
+**Meeting notes:** None of the other variables explained much variation within any of the models, however, this is different when split by condition, where machine trust propensity explains a considerable portion of variance in a few models. This is likely due to the weird data patterns found in the correlation. Again, there was a discussion of trade off of needless analysis complexity (and higher likeliness of errors) against better explaining what is occurring in the data and showing that we are still getting the relationships we are expecting.
+
+
+**Analysis 4: Reliability of TIAS**
+
+The study aimed to assess whether the TIAS is a reliable measure of trust in AI. To test this, we calculated the Cronbach's Alpha for TIAS scale responses. The results showed that the Cronbach's alpha for all the items of the scale was 0.94. The alphas for the items split by study were 0.94. An exploratory factor analysis for each study was run and indicated 2 factors. The first FA for study 1 indicated that items 1,2,3,5 loaded onto one factor, items 6-12 loaded onto the second factor, and item 4 was split between the factors. The second FA for study 2 indicated that items 1-5 loaded onto one factor and items 6-12 loaded onto the second factor. The results from the Cronbach's alpha and exploratory factor analysis support that the TIAS is a reliable measure of trust in AI. 
+
+
+**Meeting notes:** We discussed the possibility of the two factors being due to methodology (negative items or positive items) or being trust and distrust. It was suggested the best course of action may be to present both options with supporting literature but remaining noncommittal as the purpose of the paper is not to engage in the trust vs distrust debate. The high Cronbach’s alpha suggests that we may just be measuring one latent construct, but other literature suggests we may be measuring two. 
+
+
+<!--- "# nolint end" ---> 

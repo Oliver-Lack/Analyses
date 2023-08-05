@@ -1,0 +1,3644 @@
+---
+title: Pilot Study - Measuring Trust in AI
+author: Oliver Lack Data61 CSIRO
+date: 2022 - 2023
+output: 
+  html_document:
+    theme: darkly
+    highlight: tango
+    code_download: true
+
+---
+
+
+```{r Package Loading, message=FALSE, warning=FALSE, include=FALSE}
+list.of.packages <- c("tidyverse", "sjPlot", "sjmisc", "sjlabelled", "gtsummary", "lsr", "haven", "RColorBrewer", "viridis",
+                      "effectsize", "gapminder", "data.table", "formattable", "rstatix", "magrittr", "DescTools", "magrittr", "ggpubr", "dplyr", "tidyr", "pander", "bazar",
+                      "ez", "huxtable", "papeR", "jtools", "data.table", "gridExtra", "tinytex")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+library(DescTools)
+library(sjPlot)
+library(huxtable)
+library(jtools)
+library(papeR)
+library(sjmisc)
+library(sjlabelled)
+library(gtsummary)
+library(tinytex)
+library(formattable)
+library(pander)
+library(bazar)
+library(gridExtra)
+library(data.table)
+library(tidyr)
+library(car)
+library(lsr)
+library(gapminder)
+library(magrittr)
+library(tidyverse) 
+library(rstatix)
+library(haven) 
+library(viridis) 
+library(RColorBrewer) 
+library(effectsize) 
+library(ggpubr)
+library(dplyr)
+library(ez)
+```
+
+```{r Import and Cleaning, echo=FALSE, message=FALSE, warning=FALSE}
+Study_Data <- read.csv("Pilot Study DATA.csv")
+
+Qualtrics_DF <-  #Selecting relevant columns from csv
+  Study_Data %>% select(ResponseId, SLIDS1_1, SLIDS1_2, SLIDS1_3, TRUSTS1, SLIDS2_1, SLIDS2_2, SLIDS2_3,
+                        TRUSTS2, SLIDS3_1, SLIDS3_2, SLIDS3_3, TRUSTS3, age, gen, Education, ProlificID, 
+                        S1_Condition, S2_Condition, S3_Condition)
+
+
+Qualtrics_DF <- Qualtrics_DF[-c(1,2),] #delete 1st and second row meta data
+
+                              
+Qualtrics_DF <-  #Renaming columns for readability
+  Qualtrics_DF %>% rename(ID = ResponseId, Age = age, Gender = gen, Prolific_ID = ProlificID,
+                              Risk_S1 = SLIDS1_1, Performance_S1 = SLIDS1_2, 
+                              Integrity_S1 = SLIDS1_3, Trust_S1 = TRUSTS1, 
+                              Risk_S2 = SLIDS2_1, Performance_S2 = SLIDS2_2, 
+                              Integrity_S2 = SLIDS2_3, Trust_S2 = TRUSTS2,
+                              Risk_S3 = SLIDS3_1, Performance_S3 = SLIDS3_2, 
+                              Integrity_S3 = SLIDS3_3, Trust_S3 = TRUSTS3)
+
+#Qualtrics_DF is the base dataframe in the Qualtrics format. You may prefer this format.
+
+
+Qualtrics_DF <- Qualtrics_DF %>%    #renaming the values of the scenario conditions for readability
+      mutate_at("S1_Condition", str_replace, "S1", "")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("S2_Condition", str_replace, "S2", "")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("S3_Condition", str_replace, "S3", "")
+Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at("S3_Condition", str_replace, "S4", "")
+
+#Recoding the trust score likert scale output as a numeric 1-7 variable 
+
+cols1 <- c("Trust_S1", "Trust_S2", "Trust_S3")
+
+values1 <- c("Strongly disagree", "Somewhat disagree", "Disagree", 
+            "Neither agree nor disagree", "Somewhat agree", "Agree", "Strongly agree")
+
+numeric_values <- as.character(1:7)
+
+for (col1 in cols1) {
+  for (i in seq_along(values1)) {
+    Qualtrics_DF <- Qualtrics_DF %>%
+      mutate_at(col1, str_replace, values1[i], numeric_values[i])
+  }
+}
+
+#Change everything required to numeric variables (default import is set to character)
+
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Risk_S1 = as.numeric(Risk_S1))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Risk_S2 = as.numeric(Risk_S2))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Risk_S3 = as.numeric(Risk_S3))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Performance_S1 = as.numeric(Performance_S1))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Performance_S2 = as.numeric(Performance_S2))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Performance_S3 = as.numeric(Performance_S3))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Integrity_S1 = as.numeric(Integrity_S1))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Integrity_S2 = as.numeric(Integrity_S2))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Integrity_S3 = as.numeric(Integrity_S3))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Age = as.numeric(Age))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Trust_S1 = as.numeric(Trust_S1))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Trust_S2 = as.numeric(Trust_S2))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Trust_S3 = as.numeric(Trust_S3))
+
+#Change everything relevant to factor variables 
+
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Gender = as.factor(Gender))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(Education = as.factor(Education))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(S1_Condition = as.factor(S1_Condition))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(S2_Condition = as.factor(S2_Condition))
+Qualtrics_DF <- Qualtrics_DF %>%
+  mutate(S3_Condition = as.factor(S3_Condition))
+
+
+```
+
+# Analyses {.tabset}
+
+## Summary Statistics {.tabset}
+
+### Group Count
+
+<br>
+
+#### **Group Count**
+
+```{r Group Count, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Setting custom colours for the tables that will be created
+customGreen0 = "#DeF7E9"
+
+customGreen = "#71CA97"
+
+customRed = "#ff7f7f"
+
+#Participant count in each high/low condition by Application
+
+S1_Group_Count <- Qualtrics_DF %>%
+  group_by(S1_Condition) %>% summarise(n = n()) 
+S1_Group_Count <- 
+  S1_Group_Count %>% rename(n1 = n)
+
+S2_Group_Count <- Qualtrics_DF %>%
+  group_by(S2_Condition) %>% summarise(n = n()) 
+S2_Group_Count <- 
+  S2_Group_Count %>% rename(n2 = n)
+
+S3_Group_Count <- Qualtrics_DF %>%
+  group_by(S3_Condition) %>% summarise(n = n())
+S3_Group_Count <- 
+  S3_Group_Count %>% rename(n3 = n)
+
+Group_count_list <- list("S1_Group_Count", "S2_Group_Count", "S3_Group_Count")
+Group_Count <- cbind(S1_Group_Count, S2_Group_Count, S3_Group_Count)
+
+Group_Count <- Group_Count %>%    #renaming the values of the scenario conditions for readability
+      rename(Car=S1_Condition, Virtual_Cell_Select=S2_Condition, 
+             "DataDoc(Hp LP) - Airline (HI LI)"=S3_Condition)
+
+
+formattable(Group_Count, align =c("c","c","c", "c", "c", "c"), list(
+  `S1_Condition` = formatter("span", style = ~ style(color = "grey",font.weight = "bold")), 
+  `S2_Condition` = formatter("span", style = ~ style(color = "grey",font.weight = "bold")), 
+  `S3_Condition` = formatter("span", style = ~ style(color = "grey",font.weight = "bold")), 
+  `S1_n` = color_bar("customGreen0"),
+  `S2_n` = color_bar("customGreen0"),
+  `S3_n` = color_bar("customGreen0")),
+     table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+    
+
+```
+
+### Summary by Application
+
+<br> <br>
+
+#### **Summary Statistics by Application**
+
+<br> <br>
+
+```{r Summary Statistics, echo=FALSE, message=FALSE, warning=FALSE}
+# General Summary statistics table for risk, trust, performance and Integrity 
+
+risk_S1_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Risk_S1, na.rm = TRUE),2),
+            SD = round(sd(Risk_S1, na.rm = TRUE),2),
+            Min = round(min(Risk_S1, na.rm = TRUE),2), 
+            Max = round(max(Risk_S1, na.rm = TRUE),2), 
+            Median = round(median(Risk_S1, na.rm = TRUE),2) 
+            ) 
+
+risk_S2_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Risk_S2, na.rm = TRUE),2),
+            SD = round(sd(Risk_S2, na.rm = TRUE),2),
+            Min = round(min(Risk_S2, na.rm = TRUE),2), 
+            Max = round(max(Risk_S2, na.rm = TRUE),2), 
+            Median = round(median(Risk_S2, na.rm = TRUE),2) 
+            ) 
+
+risk_S3_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Risk_S3, na.rm = TRUE),2),
+            SD = round(sd(Risk_S3, na.rm = TRUE),2),
+            Min = round(min(Risk_S3, na.rm = TRUE),2), 
+            Max = round(max(Risk_S3, na.rm = TRUE),2), 
+            Median = round(median(Risk_S3, na.rm = TRUE),2) 
+            ) 
+
+Risk_List <- list(risk_S1_summary, risk_S2_summary, risk_S3_summary)
+Risk_Summary <- Risk_List %>% reduce(full_join, by=NULL)
+Risk_Summary$AI_Application <- 1:3
+Risk_Summary$Score <- rep("Risk", times = 3)
+Risk_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Risk_Summary <- Risk_Summary[, Risk_Order]
+
+trust_S1_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Trust_S1, na.rm = TRUE),2),
+            SD = round(sd(Trust_S1, na.rm = TRUE),2),
+            Min = round(min(Trust_S1, na.rm = TRUE),2), 
+            Max = round(max(Trust_S1, na.rm = TRUE),2), 
+            Median = round(median(Trust_S1, na.rm = TRUE),2) 
+            ) 
+
+trust_S2_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Trust_S2, na.rm = TRUE),2),
+            SD = round(sd(Trust_S2, na.rm = TRUE),2),
+            Min = round(min(Trust_S2, na.rm = TRUE),2), 
+            Max = round(max(Trust_S2, na.rm = TRUE),2), 
+            Median = round(median(Trust_S2, na.rm = TRUE),2) 
+            ) 
+
+trust_S3_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Trust_S3, na.rm = TRUE),2),
+            SD = round(sd(Trust_S3, na.rm = TRUE),2),
+            Min = round(min(Trust_S3, na.rm = TRUE),2), 
+            Max = round(max(Trust_S3, na.rm = TRUE),2), 
+            Median = round(median(Trust_S3, na.rm = TRUE),2) 
+            ) 
+
+Trust_List <- list(trust_S1_summary, trust_S2_summary, trust_S3_summary)
+Trust_Summary <- Trust_List %>% reduce(full_join, by=NULL)
+Trust_Summary$AI_Application <- 1:3
+Trust_Summary$Score <- rep("Trust", times = 3)
+Trust_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Trust_Summary <- Trust_Summary[, Trust_Order]
+
+performance_S1_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2),
+            SD = round(sd(Performance_S1, na.rm = TRUE),2),
+            Min = round(min(Performance_S1, na.rm = TRUE),2), 
+            Max = round(max(Performance_S1, na.rm = TRUE),2), 
+            Median = round(median(Performance_S1, na.rm = TRUE),2) 
+            ) 
+
+performance_S2_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2),
+            SD = round(sd(Performance_S2, na.rm = TRUE),2),
+            Min = round(min(Performance_S2, na.rm = TRUE),2), 
+            Max = round(max(Performance_S2, na.rm = TRUE),2), 
+            Median = round(median(Performance_S2, na.rm = TRUE),2) 
+            ) 
+
+performance_S3_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2),
+            SD = round(sd(Performance_S3, na.rm = TRUE),2),
+            Min = round(min(Performance_S3, na.rm = TRUE),2), 
+            Max = round(max(Performance_S3, na.rm = TRUE),2), 
+            Median = round(median(Performance_S3, na.rm = TRUE),2) 
+            ) 
+
+Performance_List <- list(performance_S1_summary, performance_S2_summary, performance_S3_summary)
+Performance_Summary <- Performance_List %>% reduce(full_join, by=NULL)
+Performance_Summary$AI_Application <- 1:3
+Performance_Summary$Score <- rep("Performance", times = 3)
+Performance_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Performance_Summary <- Performance_Summary[, Performance_Order]
+
+integrity_S1_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S1, na.rm = TRUE),2),
+            Min = round(min(Integrity_S1, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S1, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S1, na.rm = TRUE),2) 
+            ) 
+
+integrity_S2_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S2, na.rm = TRUE),2),
+            Min = round(min(Integrity_S2, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S2, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S2, na.rm = TRUE),2) 
+            ) 
+
+integrity_S3_summary <- Qualtrics_DF %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S3, na.rm = TRUE),2),
+            Min = round(min(Integrity_S3, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S3, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S3, na.rm = TRUE),2) 
+            ) 
+
+Integrity_List <- list(integrity_S1_summary, integrity_S2_summary, integrity_S3_summary)
+Integrity_Summary <- Integrity_List %>% reduce(full_join, by=NULL)
+Integrity_Summary$AI_Application <- 1:3
+Integrity_Summary$Score <- rep("Integrity", times = 3)
+Integrity_Order <- c("Score", "AI_Application", "Mean", "SD",
+               "Median", "Min", "Max")
+Integrity_Summary <- Integrity_Summary[, Integrity_Order]
+
+
+Summary_List <- list(Risk_Summary, Trust_Summary, Performance_Summary, Integrity_Summary)
+Summary <- Summary_List %>% reduce(full_join, by=NULL)
+
+Summary <- Summary %>%    #renaming the values of the scenario conditions for readability
+      mutate_at("AI_Application", str_replace, "1", "Car")
+Summary <- Summary %>%    
+      mutate_at("AI_Application", str_replace, "2", "Virtual Cell Select")
+Summary <- Summary %>%    
+      mutate_at("AI_Application", str_replace, "3", "DataDoc / Airline")
+
+formattable(Summary, align =c("l","c","c", "c", "c", "c", "r"), list(
+  `Score` = formatter("span", style = ~ style(color = "whitesmoke",font.weight = "normal")), 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+```
+
+### Summary by Condition
+
+<br> <br>
+
+#### **Summary Statistics by Condition**
+
+<br> <br>
+
+```{r Summary Condition, echo=FALSE, message=FALSE, warning=FALSE}
+
+###Risk for all conditions
+
+
+
+
+#HP Risk
+
+S1_HP <- subset(Qualtrics_DF, S1_Condition == 'HP')
+
+S1_HP_Risk_Summary <- S1_HP %>% 
+  summarise(Mean = round(mean(Risk_S1, na.rm = TRUE),2),
+            SD = round(sd(Risk_S1, na.rm = TRUE),2),
+            Min = round(min(Risk_S1, na.rm = TRUE),2), 
+            Max = round(max(Risk_S1, na.rm = TRUE),2), 
+            Median = round(median(Risk_S1, na.rm = TRUE),2) 
+            ) 
+S1_HP_Risk_Summary$Condition <- "HP"
+
+S2_HP <- subset(Qualtrics_DF, S2_Condition == 'HP')
+
+S2_HP_Risk_Summary <- S2_HP %>% 
+  summarise(Mean = round(mean(Risk_S2, na.rm = TRUE),2),
+            SD = round(sd(Risk_S2, na.rm = TRUE),2),
+            Min = round(min(Risk_S2, na.rm = TRUE),2), 
+            Max = round(max(Risk_S2, na.rm = TRUE),2), 
+            Median = round(median(Risk_S2, na.rm = TRUE),2) 
+            ) 
+S2_HP_Risk_Summary$Condition <- "HP"
+
+S3_HP <- subset(Qualtrics_DF, S3_Condition == 'HP')
+
+S3_HP_Risk_Summary <- S3_HP %>% 
+  summarise(Mean = round(mean(Risk_S3, na.rm = TRUE),2),
+            SD = round(sd(Risk_S3, na.rm = TRUE),2),
+            Min = round(min(Risk_S3, na.rm = TRUE),2), 
+            Max = round(max(Risk_S3, na.rm = TRUE),2), 
+            Median = round(median(Risk_S3, na.rm = TRUE),2) 
+            ) 
+S3_HP_Risk_Summary$Condition <- "HP"
+
+
+
+
+
+
+#LP Risk
+
+S1_LP <- subset(Qualtrics_DF, S1_Condition == 'LP')
+
+S1_LP_Risk_Summary <- S1_LP %>% 
+  summarise(Mean = round(mean(Risk_S1, na.rm = TRUE),2),
+            SD = round(sd(Risk_S1, na.rm = TRUE),2),
+            Min = round(min(Risk_S1, na.rm = TRUE),2), 
+            Max = round(max(Risk_S1, na.rm = TRUE),2), 
+            Median = round(median(Risk_S1, na.rm = TRUE),2) 
+            ) 
+S1_LP_Risk_Summary$Condition <- "LP"
+
+S2_LP <- subset(Qualtrics_DF, S2_Condition == 'LP')
+
+S2_LP_Risk_Summary <- S2_LP %>% 
+  summarise(Mean = round(mean(Risk_S2, na.rm = TRUE),2),
+            SD = round(sd(Risk_S2, na.rm = TRUE),2),
+            Min = round(min(Risk_S2, na.rm = TRUE),2), 
+            Max = round(max(Risk_S2, na.rm = TRUE),2), 
+            Median = round(median(Risk_S2, na.rm = TRUE),2) 
+            ) 
+S2_LP_Risk_Summary$Condition <- "LP"
+
+S3_LP <- subset(Qualtrics_DF, S3_Condition == 'LP')
+
+S3_LP_Risk_Summary <- S3_LP %>% 
+  summarise(Mean = round(mean(Risk_S3, na.rm = TRUE),2),
+            SD = round(sd(Risk_S3, na.rm = TRUE),2),
+            Min = round(min(Risk_S3, na.rm = TRUE),2), 
+            Max = round(max(Risk_S3, na.rm = TRUE),2), 
+            Median = round(median(Risk_S3, na.rm = TRUE),2) 
+            ) 
+S3_LP_Risk_Summary$Condition <- "LP"
+
+
+
+
+
+#HI Risk
+
+S1_HI <- subset(Qualtrics_DF, S1_Condition == 'HI')
+
+S1_HI_Risk_Summary <- S1_HI %>% 
+  summarise(Mean = round(mean(Risk_S1, na.rm = TRUE),2),
+            SD = round(sd(Risk_S1, na.rm = TRUE),2),
+            Min = round(min(Risk_S1, na.rm = TRUE),2), 
+            Max = round(max(Risk_S1, na.rm = TRUE),2), 
+            Median = round(median(Risk_S1, na.rm = TRUE),2) 
+            ) 
+S1_HI_Risk_Summary$Condition <- "HI"
+
+S2_HI <- subset(Qualtrics_DF, S2_Condition == 'HI')
+
+S2_HI_Risk_Summary <- S2_HI %>% 
+  summarise(Mean = round(mean(Risk_S2, na.rm = TRUE),2),
+            SD = round(sd(Risk_S2, na.rm = TRUE),2),
+            Min = round(min(Risk_S2, na.rm = TRUE),2), 
+            Max = round(max(Risk_S2, na.rm = TRUE),2), 
+            Median = round(median(Risk_S2, na.rm = TRUE),2) 
+            ) 
+S2_HI_Risk_Summary$Condition <- "HI"
+
+S3_HI <- subset(Qualtrics_DF, S3_Condition == 'HI')
+
+S3_HI_Risk_Summary <- S3_HI %>% 
+  summarise(Mean = round(mean(Risk_S3, na.rm = TRUE),2),
+            SD = round(sd(Risk_S3, na.rm = TRUE),2),
+            Min = round(min(Risk_S3, na.rm = TRUE),2), 
+            Max = round(max(Risk_S3, na.rm = TRUE),2), 
+            Median = round(median(Risk_S3, na.rm = TRUE),2) 
+            ) 
+S3_HI_Risk_Summary$Condition <- "HI"
+
+
+
+
+
+#LI Risk
+
+S1_LI <- subset(Qualtrics_DF, S1_Condition == 'LI')
+
+S1_LI_Risk_Summary <- S1_LI %>% 
+  summarise(Mean = round(mean(Risk_S1, na.rm = TRUE),2),
+            SD = round(sd(Risk_S1, na.rm = TRUE),2),
+            Min = round(min(Risk_S1, na.rm = TRUE),2), 
+            Max = round(max(Risk_S1, na.rm = TRUE),2), 
+            Median = round(median(Risk_S1, na.rm = TRUE),2) 
+            ) 
+S1_LI_Risk_Summary$Condition <- "LI"
+
+S2_LI <- subset(Qualtrics_DF, S2_Condition == 'LI')
+
+S2_LI_Risk_Summary <- S2_LI %>% 
+  summarise(Mean = round(mean(Risk_S2, na.rm = TRUE),2),
+            SD = round(sd(Risk_S2, na.rm = TRUE),2),
+            Min = round(min(Risk_S2, na.rm = TRUE),2), 
+            Max = round(max(Risk_S2, na.rm = TRUE),2), 
+            Median = round(median(Risk_S2, na.rm = TRUE),2) 
+            ) 
+S2_LI_Risk_Summary$Condition <- "LI"
+
+S3_LI <- subset(Qualtrics_DF, S3_Condition == 'LI')
+
+S3_LI_Risk_Summary <- S3_LI %>% 
+  summarise(Mean = round(mean(Risk_S3, na.rm = TRUE),2),
+            SD = round(sd(Risk_S3, na.rm = TRUE),2),
+            Min = round(min(Risk_S3, na.rm = TRUE),2), 
+            Max = round(max(Risk_S3, na.rm = TRUE),2), 
+            Median = round(median(Risk_S3, na.rm = TRUE),2) 
+            ) 
+S3_LI_Risk_Summary$Condition <- "LI"
+
+
+
+
+
+
+
+
+
+
+
+##################### Trust  #############
+
+
+#HP Trust
+
+S1_HP_Trust_Summary <- S1_HP %>% 
+  summarise(Mean = round(mean(Trust_S1, na.rm = TRUE),2),
+            SD = round(sd(Trust_S1, na.rm = TRUE),2),
+            Min = round(min(Trust_S1, na.rm = TRUE),2), 
+            Max = round(max(Trust_S1, na.rm = TRUE),2), 
+            Median = round(median(Trust_S1, na.rm = TRUE),2) 
+            ) 
+S1_HP_Trust_Summary$Condition <- "HP"
+
+S2_HP_Trust_Summary <- S2_HP %>% 
+  summarise(Mean = round(mean(Trust_S2, na.rm = TRUE),2),
+            SD = round(sd(Trust_S2, na.rm = TRUE),2),
+            Min = round(min(Trust_S2, na.rm = TRUE),2), 
+            Max = round(max(Trust_S2, na.rm = TRUE),2), 
+            Median = round(median(Trust_S2, na.rm = TRUE),2) 
+            ) 
+S2_HP_Trust_Summary$Condition <- "HP"
+
+S3_HP_Trust_Summary <- S3_HP %>% 
+  summarise(Mean = round(mean(Trust_S3, na.rm = TRUE),2),
+            SD = round(sd(Trust_S3, na.rm = TRUE),2),
+            Min = round(min(Trust_S3, na.rm = TRUE),2), 
+            Max = round(max(Trust_S3, na.rm = TRUE),2), 
+            Median = round(median(Trust_S3, na.rm = TRUE),2) 
+            ) 
+S3_HP_Trust_Summary$Condition <- "HP"
+
+
+
+
+
+
+#LP Trust
+
+
+S1_LP_Trust_Summary <- S1_LP %>% 
+  summarise(Mean = round(mean(Trust_S1, na.rm = TRUE),2),
+            SD = round(sd(Trust_S1, na.rm = TRUE),2),
+            Min = round(min(Trust_S1, na.rm = TRUE),2), 
+            Max = round(max(Trust_S1, na.rm = TRUE),2), 
+            Median = round(median(Trust_S1, na.rm = TRUE),2) 
+            ) 
+S1_LP_Trust_Summary$Condition <- "LP"
+
+
+S2_LP_Trust_Summary <- S2_LP %>% 
+  summarise(Mean = round(mean(Trust_S2, na.rm = TRUE),2),
+            SD = round(sd(Trust_S2, na.rm = TRUE),2),
+            Min = round(min(Trust_S2, na.rm = TRUE),2), 
+            Max = round(max(Trust_S2, na.rm = TRUE),2), 
+            Median = round(median(Trust_S2, na.rm = TRUE),2) 
+            ) 
+S2_LP_Trust_Summary$Condition <- "LP"
+
+
+S3_LP_Trust_Summary <- S3_LP %>% 
+  summarise(Mean = round(mean(Trust_S3, na.rm = TRUE),2),
+            SD = round(sd(Trust_S3, na.rm = TRUE),2),
+            Min = round(min(Trust_S3, na.rm = TRUE),2), 
+            Max = round(max(Trust_S3, na.rm = TRUE),2), 
+            Median = round(median(Trust_S3, na.rm = TRUE),2) 
+            ) 
+S3_LP_Trust_Summary$Condition <- "LP"
+
+
+
+
+
+#HI Trust
+
+S1_HI_Trust_Summary <- S1_HI %>% 
+  summarise(Mean = round(mean(Trust_S1, na.rm = TRUE),2),
+            SD = round(sd(Trust_S1, na.rm = TRUE),2),
+            Min = round(min(Trust_S1, na.rm = TRUE),2), 
+            Max = round(max(Trust_S1, na.rm = TRUE),2), 
+            Median = round(median(Trust_S1, na.rm = TRUE),2) 
+            ) 
+S1_HI_Trust_Summary$Condition <- "HI"
+
+
+S2_HI_Trust_Summary <- S2_HI %>% 
+  summarise(Mean = round(mean(Trust_S2, na.rm = TRUE),2),
+            SD = round(sd(Trust_S2, na.rm = TRUE),2),
+            Min = round(min(Trust_S2, na.rm = TRUE),2), 
+            Max = round(max(Trust_S2, na.rm = TRUE),2), 
+            Median = round(median(Trust_S2, na.rm = TRUE),2) 
+            ) 
+S2_HI_Trust_Summary$Condition <- "HI"
+
+
+S3_HI_Trust_Summary <- S3_HI %>% 
+  summarise(Mean = round(mean(Trust_S3, na.rm = TRUE),2),
+            SD = round(sd(Trust_S3, na.rm = TRUE),2),
+            Min = round(min(Trust_S3, na.rm = TRUE),2), 
+            Max = round(max(Trust_S3, na.rm = TRUE),2), 
+            Median = round(median(Trust_S3, na.rm = TRUE),2) 
+            ) 
+S3_HI_Trust_Summary$Condition <- "HI"
+
+
+
+
+
+#LI Risk
+
+
+S1_LI_Trust_Summary <- S1_LI %>% 
+  summarise(Mean = round(mean(Trust_S1, na.rm = TRUE),2),
+            SD = round(sd(Trust_S1, na.rm = TRUE),2),
+            Min = round(min(Trust_S1, na.rm = TRUE),2), 
+            Max = round(max(Trust_S1, na.rm = TRUE),2), 
+            Median = round(median(Trust_S1, na.rm = TRUE),2) 
+            ) 
+S1_LI_Trust_Summary$Condition <- "LI"
+
+
+S2_LI_Trust_Summary <- S2_LI %>% 
+  summarise(Mean = round(mean(Trust_S2, na.rm = TRUE),2),
+            SD = round(sd(Trust_S2, na.rm = TRUE),2),
+            Min = round(min(Trust_S2, na.rm = TRUE),2), 
+            Max = round(max(Trust_S2, na.rm = TRUE),2), 
+            Median = round(median(Trust_S2, na.rm = TRUE),2) 
+            ) 
+S2_LI_Trust_Summary$Condition <- "LI"
+
+S3_LI_Trust_Summary <- S3_LI %>% 
+  summarise(Mean = round(mean(Trust_S3, na.rm = TRUE),2),
+            SD = round(sd(Trust_S3, na.rm = TRUE),2),
+            Min = round(min(Trust_S3, na.rm = TRUE),2), 
+            Max = round(max(Trust_S3, na.rm = TRUE),2), 
+            Median = round(median(Trust_S3, na.rm = TRUE),2) 
+            ) 
+S3_LI_Trust_Summary$Condition <- "LI"
+
+
+
+
+
+
+
+
+##################### Performance  #############
+
+
+#HP Performance
+
+S1_HP_Performance_Summary <- S1_HP %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2),
+            SD = round(sd(Performance_S1, na.rm = TRUE),2),
+            Min = round(min(Performance_S1, na.rm = TRUE),2), 
+            Max = round(max(Performance_S1, na.rm = TRUE),2), 
+            Median = round(median(Performance_S1, na.rm = TRUE),2) 
+            ) 
+S1_HP_Performance_Summary$Condition <- "HP"
+
+S2_HP_Performance_Summary <- S2_HP %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2),
+            SD = round(sd(Performance_S2, na.rm = TRUE),2),
+            Min = round(min(Performance_S2, na.rm = TRUE),2), 
+            Max = round(max(Performance_S2, na.rm = TRUE),2), 
+            Median = round(median(Performance_S2, na.rm = TRUE),2) 
+            ) 
+S2_HP_Performance_Summary$Condition <- "HP"
+
+S3_HP_Performance_Summary <- S3_HP %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2),
+            SD = round(sd(Performance_S3, na.rm = TRUE),2),
+            Min = round(min(Performance_S3, na.rm = TRUE),2), 
+            Max = round(max(Performance_S3, na.rm = TRUE),2), 
+            Median = round(median(Performance_S3, na.rm = TRUE),2) 
+            ) 
+S3_HP_Performance_Summary$Condition <- "HP"
+
+
+
+
+
+
+#LP Performance
+
+
+S1_LP_Performance_Summary <- S1_LP %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2),
+            SD = round(sd(Performance_S1, na.rm = TRUE),2),
+            Min = round(min(Performance_S1, na.rm = TRUE),2), 
+            Max = round(max(Performance_S1, na.rm = TRUE),2), 
+            Median = round(median(Performance_S1, na.rm = TRUE),2) 
+            ) 
+S1_LP_Performance_Summary$Condition <- "LP"
+
+
+S2_LP_Performance_Summary <- S2_LP %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2),
+            SD = round(sd(Performance_S2, na.rm = TRUE),2),
+            Min = round(min(Performance_S2, na.rm = TRUE),2), 
+            Max = round(max(Performance_S2, na.rm = TRUE),2), 
+            Median = round(median(Performance_S2, na.rm = TRUE),2) 
+            ) 
+S2_LP_Performance_Summary$Condition <- "LP"
+
+
+S3_LP_Performance_Summary <- S3_LP %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2),
+            SD = round(sd(Performance_S3, na.rm = TRUE),2),
+            Min = round(min(Performance_S3, na.rm = TRUE),2), 
+            Max = round(max(Performance_S3, na.rm = TRUE),2), 
+            Median = round(median(Performance_S3, na.rm = TRUE),2) 
+            ) 
+S3_LP_Performance_Summary$Condition <- "LP"
+
+
+
+
+
+#HI Performance
+
+S1_HI_Performance_Summary <- S1_HI %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2),
+            SD = round(sd(Performance_S1, na.rm = TRUE),2),
+            Min = round(min(Performance_S1, na.rm = TRUE),2), 
+            Max = round(max(Performance_S1, na.rm = TRUE),2), 
+            Median = round(median(Performance_S1, na.rm = TRUE),2) 
+            ) 
+S1_HI_Performance_Summary$Condition <- "HI"
+
+
+S2_HI_Performance_Summary <- S2_HI %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2),
+            SD = round(sd(Performance_S2, na.rm = TRUE),2),
+            Min = round(min(Performance_S2, na.rm = TRUE),2), 
+            Max = round(max(Performance_S2, na.rm = TRUE),2), 
+            Median = round(median(Performance_S2, na.rm = TRUE),2) 
+            ) 
+S2_HI_Performance_Summary$Condition <- "HI"
+
+
+S3_HI_Performance_Summary <- S3_HI %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2),
+            SD = round(sd(Performance_S3, na.rm = TRUE),2),
+            Min = round(min(Performance_S3, na.rm = TRUE),2), 
+            Max = round(max(Performance_S3, na.rm = TRUE),2), 
+            Median = round(median(Performance_S3, na.rm = TRUE),2) 
+            ) 
+S3_HI_Performance_Summary$Condition <- "HI"
+
+
+
+
+
+#LI Performance
+
+
+S1_LI_Performance_Summary <- S1_LI %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2),
+            SD = round(sd(Performance_S1, na.rm = TRUE),2),
+            Min = round(min(Performance_S1, na.rm = TRUE),2), 
+            Max = round(max(Performance_S1, na.rm = TRUE),2), 
+            Median = round(median(Performance_S1, na.rm = TRUE),2) 
+            ) 
+S1_LI_Performance_Summary$Condition <- "LI"
+
+
+S2_LI_Performance_Summary <- S2_LI %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2),
+            SD = round(sd(Performance_S2, na.rm = TRUE),2),
+            Min = round(min(Performance_S2, na.rm = TRUE),2), 
+            Max = round(max(Performance_S2, na.rm = TRUE),2), 
+            Median = round(median(Performance_S2, na.rm = TRUE),2) 
+            ) 
+S2_LI_Performance_Summary$Condition <- "LI"
+
+S3_LI_Performance_Summary <- S3_LI %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2),
+            SD = round(sd(Performance_S3, na.rm = TRUE),2),
+            Min = round(min(Performance_S3, na.rm = TRUE),2), 
+            Max = round(max(Performance_S3, na.rm = TRUE),2), 
+            Median = round(median(Performance_S3, na.rm = TRUE),2) 
+            ) 
+S3_LI_Performance_Summary$Condition <- "LI"
+
+
+
+
+
+
+
+###################### Integrity ################
+
+#HP Integrity
+
+S1_HP_Integrity_Summary <- S1_HP %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S1, na.rm = TRUE),2),
+            Min = round(min(Integrity_S1, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S1, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S1, na.rm = TRUE),2) 
+            ) 
+S1_HP_Integrity_Summary$Condition <- "HP"
+
+S2_HP_Integrity_Summary <- S2_HP %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S2, na.rm = TRUE),2),
+            Min = round(min(Integrity_S2, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S2, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S2, na.rm = TRUE),2) 
+            ) 
+S2_HP_Integrity_Summary$Condition <- "HP"
+
+S3_HP_Integrity_Summary <- S3_HP %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S3, na.rm = TRUE),2),
+            Min = round(min(Integrity_S3, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S3, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S3, na.rm = TRUE),2) 
+            ) 
+S3_HP_Integrity_Summary$Condition <- "HP"
+
+
+
+
+
+
+#LP Performance
+
+
+S1_LP_Integrity_Summary <- S1_LP %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S1, na.rm = TRUE),2),
+            Min = round(min(Integrity_S1, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S1, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S1, na.rm = TRUE),2) 
+            ) 
+S1_LP_Integrity_Summary$Condition <- "LP"
+
+
+S2_LP_Integrity_Summary <- S2_LP %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S2, na.rm = TRUE),2),
+            Min = round(min(Integrity_S2, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S2, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S2, na.rm = TRUE),2) 
+            ) 
+S2_LP_Integrity_Summary$Condition <- "LP"
+
+
+S3_LP_Integrity_Summary <- S3_LP %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S3, na.rm = TRUE),2),
+            Min = round(min(Integrity_S3, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S3, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S3, na.rm = TRUE),2) 
+            ) 
+S3_LP_Integrity_Summary$Condition <- "LP"
+
+
+
+
+
+#HI Integrity
+
+S1_HI_Integrity_Summary <- S1_HI %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S1, na.rm = TRUE),2),
+            Min = round(min(Integrity_S1, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S1, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S1, na.rm = TRUE),2) 
+            ) 
+S1_HI_Integrity_Summary$Condition <- "HI"
+
+
+S2_HI_Integrity_Summary <- S2_HI %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S2, na.rm = TRUE),2),
+            Min = round(min(Integrity_S2, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S2, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S2, na.rm = TRUE),2) 
+            ) 
+S2_HI_Integrity_Summary$Condition <- "HI"
+
+
+S3_HI_Integrity_Summary <- S3_HI %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S3, na.rm = TRUE),2),
+            Min = round(min(Integrity_S3, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S3, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S3, na.rm = TRUE),2) 
+            ) 
+S3_HI_Integrity_Summary$Condition <- "HI"
+
+
+
+
+
+#LI Integrity
+
+
+S1_LI_Integrity_Summary <- S1_LI %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S1, na.rm = TRUE),2),
+            Min = round(min(Integrity_S1, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S1, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S1, na.rm = TRUE),2) 
+            ) 
+S1_LI_Integrity_Summary$Condition <- "LI"
+
+
+S2_LI_Integrity_Summary <- S2_LI %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S2, na.rm = TRUE),2),
+            Min = round(min(Integrity_S2, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S2, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S2, na.rm = TRUE),2) 
+            ) 
+S2_LI_Integrity_Summary$Condition <- "LI"
+
+S3_LI_Integrity_Summary <- S3_LI %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2),
+            SD = round(sd(Integrity_S3, na.rm = TRUE),2),
+            Min = round(min(Integrity_S3, na.rm = TRUE),2), 
+            Max = round(max(Integrity_S3, na.rm = TRUE),2), 
+            Median = round(median(Integrity_S3, na.rm = TRUE),2) 
+            ) 
+S3_LI_Integrity_Summary$Condition <- "LI"
+
+
+
+
+
+
+
+
+
+
+Mega_Risk_List <- list(S1_HP_Risk_Summary, S2_HP_Risk_Summary, S3_HP_Risk_Summary,
+                       S1_LP_Risk_Summary, S2_LP_Risk_Summary, S3_LP_Risk_Summary,
+                       S1_HI_Risk_Summary, S2_HI_Risk_Summary, S3_HI_Risk_Summary,
+                       S1_LI_Risk_Summary, S2_LI_Risk_Summary, S3_LI_Risk_Summary
+                      )
+
+Mega_Risk_Summary <- Mega_Risk_List %>% reduce(full_join, by=NULL)
+Mega_Risk_Summary$AI_Application <- 1:3
+Mega_Risk_Summary$Score <- rep("Risk", times = 3)
+Mega_Risk_Order <- c("Score", "AI_Application","Condition", "Mean", "SD",
+               "Median", "Min", "Max")
+Mega_Risk_Summary <- Mega_Risk_Summary[, Mega_Risk_Order]
+
+
+
+
+
+
+
+Mega_Trust_List <- list(
+                       S1_HP_Trust_Summary, S2_HP_Trust_Summary, S3_HP_Trust_Summary,
+                       S1_LP_Trust_Summary, S2_LP_Trust_Summary, S3_LP_Trust_Summary,
+                       S1_HI_Trust_Summary, S2_HI_Trust_Summary, S3_HI_Trust_Summary,
+                       S1_LI_Trust_Summary, S2_LI_Trust_Summary, S3_LI_Trust_Summary
+                      )
+
+Mega_Trust_Summary <- Mega_Trust_List %>% reduce(full_join, by=NULL)
+Mega_Trust_Summary$AI_Application <- 1:3
+Mega_Trust_Summary$Score <- rep("Trust", times = 3)
+Mega_Trust_Order <- c("Score", "AI_Application","Condition", "Mean", "SD",
+               "Median", "Min", "Max")
+Mega_Trust_Summary <- Mega_Trust_Summary[, Mega_Trust_Order]
+
+
+
+
+
+
+
+Mega_Performance_List <- list(
+                       S1_HP_Performance_Summary, S2_HP_Performance_Summary, S3_HP_Performance_Summary,
+                       S1_LP_Performance_Summary, S2_LP_Performance_Summary, S3_LP_Performance_Summary,
+                       S1_HI_Performance_Summary, S2_HI_Performance_Summary, S3_HI_Performance_Summary,
+                       S1_LI_Performance_Summary, S2_LI_Performance_Summary, S3_LI_Performance_Summary
+                       )
+
+Mega_Performance_Summary <- Mega_Performance_List %>% reduce(full_join, by=NULL)
+Mega_Performance_Summary$AI_Application <- 1:3
+Mega_Performance_Summary$Score <- rep("Performance", times = 3)
+Mega_Performance_Order <- c("Score", "AI_Application","Condition", "Mean", "SD",
+               "Median", "Min", "Max")
+Mega_Performance_Summary <- Mega_Performance_Summary[, Mega_Performance_Order]
+
+
+
+
+
+Mega_Integrity_List <- list(
+                       S1_HP_Integrity_Summary, S2_HP_Integrity_Summary, S3_HP_Integrity_Summary,
+                       S1_LP_Integrity_Summary, S2_LP_Integrity_Summary, S3_LP_Integrity_Summary,
+                       S1_HI_Integrity_Summary, S2_HI_Integrity_Summary, S3_HI_Integrity_Summary,
+                       S1_LI_Integrity_Summary,S2_LI_Integrity_Summary,S3_LI_Integrity_Summary)
+
+Mega_Integrity_Summary <- Mega_Integrity_List %>% reduce(full_join, by=NULL)
+Mega_Integrity_Summary$AI_Application <- 1:3
+Mega_Integrity_Summary$Score <- rep("Integrity", times = 3)
+Mega_Integrity_Order <- c("Score", "AI_Application","Condition", "Mean", "SD",
+               "Median", "Min", "Max")
+Mega_Integrity_Summary <- Mega_Integrity_Summary[, Mega_Integrity_Order]
+
+
+
+
+
+
+Mega_Summary_List <- list(Mega_Risk_Summary, Mega_Trust_Summary, Mega_Performance_Summary, Mega_Integrity_Summary)
+Mega_Summary <- Mega_Summary_List %>% reduce(full_join, by=NULL)
+
+Mega_Summary <- Mega_Summary %>%    #renaming the values of the scenario conditions for readability
+      mutate_at("AI_Application", str_replace, "1", "Car")
+Mega_Summary <- Mega_Summary %>%    
+      mutate_at("AI_Application", str_replace, "2", "Virtual Cell Select")
+Mega_Summary <- Mega_Summary %>%    
+      mutate_at("AI_Application", str_replace, "3", "DataDoc / Airline")
+
+formattable(Mega_Summary, align =c("l","l","l", "c", "c", "c", "c", "r"), list(
+  `Score` = formatter("span", style = ~ style(color = "whitesmoke",font.weight = "normal")), 
+            `Mean` = color_bar("orange")),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+
+
+
+```
+
+### Means
+
+<br> <br>
+
+#### **Summary of Means Between Conditions**
+
+<br><br> **Performance**
+
+```{r Summary Means,  echo=FALSE, message=FALSE, warning=FALSE}
+
+#H/L Performance 
+
+Performance_S1_Mean_HP <- S1_HP %>% 
+  summarise(Mean = round(mean(Performance_S1, na.rm = TRUE),2))
+Performance_S2_Mean_HP <- S2_HP %>% 
+  summarise(Mean = round(mean(Performance_S2, na.rm = TRUE),2))
+Performance_S3_Mean_HP <- S3_HP %>% 
+  summarise(Mean = round(mean(Performance_S3, na.rm = TRUE),2))
+
+
+H_P_Mean_List <- list(Performance_S1_Mean_HP, Performance_S2_Mean_HP, Performance_S3_Mean_HP)
+H_P_Mean_Summary <- H_P_Mean_List %>% reduce(full_join, by=NULL)
+H_P_Mean_Summary$AI_Application <- c("Car", "Virtual Cell Select", "DataDoc")
+H_P_Mean_Summary$Score <- rep("Performance", times = 3)
+H_P_Mean_Summary$Condition <- rep("HP", times = 3)
+High_Order <- c("AI_Application","Score", "Condition", "Mean")
+H_P_Mean_Summary <- H_P_Mean_Summary[, High_Order]
+
+Performance_S1_Mean_LP <- S1_LP %>% 
+  summarise(Mean2 = round(mean(Performance_S1, na.rm = TRUE),2))
+Performance_S2_Mean_LP <- S2_LP %>% 
+  summarise(Mean2 = round(mean(Performance_S2, na.rm = TRUE),2))
+Performance_S3_Mean_LP <- S3_LP %>% 
+  summarise(Mean2 = round(mean(Performance_S3, na.rm = TRUE),2))
+
+
+L_P_Mean_List <- list(Performance_S1_Mean_LP, Performance_S2_Mean_LP, Performance_S3_Mean_LP)
+L_P_Mean_Summary <- L_P_Mean_List %>% reduce(full_join, by=NULL)
+L_P_Mean_Summary$Condition2 <- rep("LP", times = 3)
+L_P_Mean_Summary$Score <- rep("Performance", times = 3)
+Low_Order <- c("Condition2", "Mean2")
+L_P_Mean_Summary <- L_P_Mean_Summary[, Low_Order]
+
+Performance_Score_Mean_Summary <- cbind(H_P_Mean_Summary, L_P_Mean_Summary)
+
+formattable(Performance_Score_Mean_Summary, align =c("l","l","c", "c", "c", "c"), list(
+           area(col=4&6) ~ formatter("span", 
+                 style = ~ style(font.weight = "bold"))),
+
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+
+
+
+```
+
+<br> <br> <br><br> **Integrity**
+
+```{r Summary Means2,  echo=FALSE, message=FALSE, warning=FALSE}
+
+#H/L Integrity 
+
+I_S1_Mean_HP <- S1_HI %>% 
+  summarise(Mean = round(mean(Integrity_S1, na.rm = TRUE),2))
+I_S2_Mean_HP <- S2_HI %>% 
+  summarise(Mean = round(mean(Integrity_S2, na.rm = TRUE),2))
+I_S3_Mean_HP <- S3_HI %>% 
+  summarise(Mean = round(mean(Integrity_S3, na.rm = TRUE),2))
+
+
+H_I_Mean_List <- list(I_S1_Mean_HP, I_S2_Mean_HP, I_S3_Mean_HP)
+H_I_Mean_Summary <- H_I_Mean_List %>% reduce(full_join, by=NULL)
+H_I_Mean_Summary$AI_Application <- c("Car", "Virtual Cell Select", "Airline Profiling")
+H_I_Mean_Summary$Score <- rep("Integrity", times = 3)
+H_I_Mean_Summary$Condition <- rep("HI", times = 3)
+High_Order <- c("AI_Application","Score", "Condition", "Mean")
+H_I_Mean_Summary <- H_I_Mean_Summary[, High_Order]
+
+I_S1_Mean_LI <- S1_LI %>% 
+  summarise(Mean2 = round(mean(Integrity_S1, na.rm = TRUE),2))
+I_S2_Mean_LI <- S2_LI %>% 
+  summarise(Mean2 = round(mean(Integrity_S2, na.rm = TRUE),2))
+I_S3_Mean_LI <- S3_LI %>% 
+  summarise(Mean2 = round(mean(Integrity_S3, na.rm = TRUE),2))
+
+
+L_I_Mean_List <- list(I_S1_Mean_LI, I_S2_Mean_LI, I_S3_Mean_LI)
+L_I_Mean_Summary <- L_I_Mean_List %>% reduce(full_join, by=NULL)
+L_I_Mean_Summary$Condition2 <- rep("LI", times = 3)
+L_I_Mean_Summary$Score <- rep("Integrity", times = 3)
+Low_Order <- c("Condition2", "Mean2")
+L_I_Mean_Summary <- L_I_Mean_Summary[, Low_Order]
+
+Integrity_Score_Mean_Summary <- cbind(H_I_Mean_Summary, L_I_Mean_Summary)
+
+formattable(Integrity_Score_Mean_Summary, align =c("l","l","c", "c", "c", "c"), list(
+           area(col=4&6) ~ formatter("span", 
+                 style = ~ style(font.weight = "bold"))),
+
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"')
+
+
+
+
+```
+
+<br> <br>
+
+## Violin/Box-Plot Visualization {.tabset}
+
+#### Measure
+
+### Risk
+
+```{r Violin Box Visualisation1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+#Scenario 1 Risk
+
+Risk_S1_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Risk_S1, 
+                                 fill = S1_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Risk Scores Between Manipulation Conditions for AI Application 1") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Risk_S1_Violin_Box
+
+
+#Scenario 1 Risk
+
+Risk_S2_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Risk_S2, 
+                                 fill = S2_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Risk Scores Between Manipulation Conditions for AI Application 2") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Risk_S2_Violin_Box
+
+
+#Scenario 3 Risk
+
+Risk_S3_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Risk_S3, 
+                                 fill = S3_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Risk Scores Between Manipulation Conditions for AI Application 3") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Risk_S3_Violin_Box
+
+```
+
+### Trust
+
+```{r Violin Box Visualisation2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+#Scenario 1 Trust
+
+Trust_S1_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Trust_S1, 
+                                 fill = S1_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for AI Application 1") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Trust_S1_Violin_Box
+
+
+#Scenario 2 Trust
+
+Trust_S2_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Trust_S2, 
+                                 fill = S2_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for AI Application 2") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Trust_S2_Violin_Box
+
+
+#Scenario 3 Trust
+
+Trust_S3_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Trust_S3, 
+                                 fill = S3_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Trust Scores Between Manipulation Conditions for AI Application 3") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 7) + 
+  scale_fill_brewer(palette = "Accent")
+
+Trust_S3_Violin_Box
+
+```
+
+### Performance
+
+```{r Violin Box Visualisation3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+#Scenario 1 Performance
+
+Performance_S1_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Performance_S1, 
+                                 fill = S1_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Performance Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Performance Scores Between Manipulation Conditions for AI Application 1") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = 1, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Performance_S1_Violin_Box
+
+
+#Scenario 2 Performance
+
+Performance_S2_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Performance_S2, 
+                                 fill = S2_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Performance Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Performance Scores Between Manipulation Conditions for AI Application 2") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = 1, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Performance_S2_Violin_Box
+
+
+#Scenario 3 Performance
+
+Performance_S3_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Performance_S3, 
+                                 fill = S3_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Performance Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Performance Scores Between Manipulation Conditions for AI Application 3") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = 1, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Performance_S3_Violin_Box
+
+```
+
+### Integrity
+
+```{r Violin Box Visualisation4, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+#Scenario 1 Integrity
+
+Integrity_S1_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Integrity_S1, 
+                                 fill = S1_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Integrity Scores Between Manipulation Conditions for AI Application 1") +
+  labs(tag = "Figure 1",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Integrity_S1_Violin_Box
+
+
+#Scenario 2 Integrity
+
+Integrity_S2_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Integrity_S2, 
+                                 fill = S2_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Integrity Scores Between Manipulation Conditions for AI Application 2") +
+  labs(tag = "Figure 2",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Integrity_S2_Violin_Box
+
+
+#Scenario 3 Integrity
+
+Integrity_S3_Violin_Box <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Integrity_S3, 
+                                 fill = S3_Condition) 
+                   ) +
+  geom_violin(na.rm = TRUE) + 
+  geom_boxplot(width=0.2, 
+               size=0.2, 
+               na.rm = TRUE) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               linetype = "dotted", 
+               na.rm = TRUE) + 
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.3,
+               colour = "black",
+               na.rm = TRUE) +
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("Manipulation Condition") +
+  ggtitle(label = "Participant Integrity Scores Between Manipulation Conditions for AI Application 3") +
+  labs(tag = "Figure 3",
+       caption = "   _____ Median", 
+       subtitle = ".......... Mean") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"), 
+        plot.caption = element_text(size = 10, hjust = 0.9, vjust = 2), 
+        plot.subtitle = element_text(size = 10, hjust= 0.885, vjust = -125),
+        ) +
+  ylim(0, 100) + 
+  scale_fill_brewer(palette = "Accent")
+
+Integrity_S3_Violin_Box
+
+```
+
+## Jitter-Plot Visualisation {.tabset}
+
+#### Measure
+
+### Risk
+
+```{r Jitter Visualisation1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Risk_S1_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Risk_S1, 
+                                 colour = S1_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Risk Score Between Conditions for AI Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Risk_S1_Jitter 
+
+Risk_S2_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Risk_S2, 
+                                 colour = S2_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Risk Score Between Conditions for AI Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Risk_S2_Jitter 
+
+Risk_S3_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Risk_S3, 
+                                 colour = S3_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Risk Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Risk Score Between Conditions for AI Application 3") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Risk_S3_Jitter 
+
+```
+
+### Trust
+
+```{r Jitter Visualisation2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Trust_S1_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Trust_S1, 
+                                 colour = S1_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for AI Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Trust_S1_Jitter 
+
+Trust_S2_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Trust_S2, 
+                                 colour = S2_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for AI Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Trust_S2_Jitter 
+
+Trust_S3_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Trust_S3, 
+                                 colour = S3_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Trust Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Trust Score Between Conditions for AI Application 3") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 7) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Trust_S3_Jitter 
+
+```
+
+### Performance
+
+```{r Jitter Visualisation3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+#Performance scores between manipulation conditions for each AI Application
+
+Performance_S1_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Performance_S1, 
+                                 colour = S1_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Perceived Performance") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Perceived Performance Between Conditions for AI Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Performance_S1_Jitter 
+
+Performance_S2_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Performance_S2, 
+                                 colour = S2_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Perceived Performance") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Perceived Performance Between Conditions for AI Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Performance_S2_Jitter 
+
+Performance_S3_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Performance_S3, 
+                                 colour = S3_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Perceived Performance") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Perceived Performance Between Conditions for AI Application 3") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Performance_S3_Jitter 
+
+```
+
+### Integrity
+
+```{r Jitter Visualisation4, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Integrity_S1_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S1_Condition, 
+                                 y = Integrity_S1, 
+                                 colour = S1_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Integrity Score Between Conditions for AI Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Integrity_S1_Jitter 
+
+Integrity_S2_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S2_Condition, 
+                                 y = Integrity_S2, 
+                                 colour = S2_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Integrity Score Between Conditions for AI Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Integrity_S2_Jitter 
+
+Integrity_S3_Jitter <- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = S3_Condition, 
+                                 y = Integrity_S3, 
+                                 colour = S3_Condition) 
+                   ) +
+  geom_jitter(alpha = .4, width = .25, na.rm = TRUE) + 
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.5,
+               size = 0.35,
+               colour = "black", 
+               na.rm = TRUE) + 
+  theme_classic(base_size = 12) + 
+  theme(legend.position = "none") + 
+  ylab("Integrity Score") + 
+  xlab("AI Application") +
+  ggtitle(label = 
+            "Participant's Integrity Score Between Conditions for AI Application 3") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.35, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 20, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold")) +
+  ylim(0, 100) + 
+  scale_colour_brewer(palette = "Dark2")
+
+Integrity_S3_Jitter 
+
+```
+
+## Scatterplot Visualisation {.tabset}
+
+#### Measure
+
+### Risk/Performance Scores
+
+```{r Scatterplots1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+##############Trust/Performance
+
+
+S1_risk_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S1, 
+                                 y = Performance_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Performance for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank()
+        )+ 
+  ylab("Perceived Performance") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S1_risk_performance_scatter
+
+S2_risk_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S2, 
+                                 y = Performance_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Performance for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Performance") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S2_risk_performance_scatter
+
+S3_risk_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S3, 
+                                 y = Performance_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Performance for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Performance") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+ xlim(0,100)
+
+S3_risk_performance_scatter
+
+
+```
+
+### Risk/Integrity Scores
+
+```{r Scatterplots2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+##############Trust/Performance
+
+S1_risk_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S1, 
+                                 y = Integrity_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Integrity for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S1_risk_integrity_scatter
+
+S2_risk_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S2, 
+                                 y = Integrity_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Integrity for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S2_risk_integrity_scatter
+
+S3_risk_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S3, 
+                                 y = Integrity_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Score Against Percieved Integrity for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Risk Score") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S3_risk_integrity_scatter
+
+
+```
+
+### Trust/Performance Scores
+
+Trust Manipulation check for Performance Scores
+
+```{r Scatterplots3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+##############Trust/Performance
+
+S1_trust_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S1, 
+                                 y = Performance_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Performance for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Performance") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S1_trust_performance_scatter
+
+S2_trust_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S2, 
+                                 y = Performance_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Performance for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Performance") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S2_trust_performance_scatter
+
+S3_trust_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S3, 
+                                 y = Performance_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Performance for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Performance") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S3_trust_performance_scatter
+
+
+```
+
+### Trust/Integrity Scores
+
+Trust Manipulation check for Integrity Scores
+
+```{r Scatterplots4, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+##############Trust/Performance
+
+S1_trust_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S1, 
+                                 y = Integrity_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Integrity for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S1_trust_integrity_scatter
+
+S2_trust_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S2, 
+                                 y = Integrity_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Integrity for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S2_trust_integrity_scatter
+
+S3_trust_integrity_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Trust_S3, 
+                                 y = Integrity_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Trust Score Against Percieved Integrity for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Perceived Integrity") + 
+  xlab("Trust") + 
+  ylim(0,100) +
+  xlim(0,7)
+
+S3_trust_integrity_scatter
+
+
+```
+
+### Integrity/Performance Scores
+
+```{r Scatterplots5, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+##############Trust/Performance
+
+S1_integrity_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Integrity_S1, 
+                                 y = Performance_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Perceived Integrity Against Performance for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Performance") + 
+  xlab("Integrity") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S1_integrity_performance_scatter
+
+S2_integrity_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Integrity_S2, 
+                                 y = Performance_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Perceived Integrity Against Performance for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Performance") + 
+  xlab("Integrity") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S2_integrity_performance_scatter
+
+S3_integrity_performance_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Integrity_S3, 
+                                 y = Performance_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Perceived Integrity Against Performance for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+       legend.position = "right", legend.title = element_blank())+ 
+  ylab("Performance") + 
+  xlab("Integrity") + 
+  ylim(0,100) +
+  xlim(0,100)
+
+S3_integrity_performance_scatter
+
+
+```
+
+### Risk/Trust Scores
+
+```{r Scatterplots6, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+S1_risk_trust_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S1, 
+                                 y = Trust_S1,
+                                 colour = S1_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Against Trust for Application 1") +
+  labs(tag = "Figure 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Trust Score") + 
+  xlab("Risk Score") + 
+  ylim(0,7) +
+  xlim(0,100)
+
+S1_risk_trust_scatter
+
+S2_risk_trust_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S2, 
+                                 y = Trust_S2,
+                                 colour = S2_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Against Trust for Application 2") +
+  labs(tag = "Figure 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+        legend.position = "right", legend.title = element_blank())+ 
+  ylab("Trust Score") + 
+  xlab("Risk Score") + 
+  ylim(0,7) +
+  xlim(0,100)
+
+S2_risk_trust_scatter
+
+S3_risk_trust_scatter<- ggplot(data = Qualtrics_DF,  
+                   mapping = aes(x = Risk_S3, 
+                                 y = Trust_S3,
+                                 colour = S3_Condition) 
+                   ) +
+  geom_point(na.rm = TRUE) + 
+  theme_classic() + 
+  stat_smooth(method=lm, na.rm = TRUE, formula = y~x)+
+  ggtitle(label = "Individual Risk Against Trust for Application 3") +
+  labs(tag = "Figure 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 65, r = 30, b = 25, l = 30), 
+        plot.tag = element_text(face = "bold", size = 12),
+        axis.title = element_text(face="bold"),
+      legend.position = "right", legend.title = element_blank())+ 
+  ylab("Trust Score") + 
+  xlab("Risk Score") + 
+  ylim(0,7) +
+  xlim(0,100)
+
+S3_risk_trust_scatter
+
+
+```
+
+## Statistical Assumption Tests {.tabset}
+
+### Equal Variance and Normality
+
+```{r Assumptions, echo=FALSE, message=FALSE, warning=FALSE}
+#Equal Variances
+bartlett.test(Qualtrics_DF$Trust_S1 ~ Qualtrics_DF$S1_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Trust_S2 ~ Qualtrics_DF$S2_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Trust_S3 ~ Qualtrics_DF$S3_Condition, data = Qualtrics_DF)
+
+bartlett.test(Qualtrics_DF$Performance_S1 ~ Qualtrics_DF$S1_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Performance_S2 ~ Qualtrics_DF$S2_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Performance_S3 ~ Qualtrics_DF$S3_Condition, data = Qualtrics_DF)
+
+bartlett.test(Qualtrics_DF$Integrity_S1 ~ Qualtrics_DF$S1_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Integrity_S2 ~ Qualtrics_DF$S2_Condition, data = Qualtrics_DF)
+bartlett.test(Qualtrics_DF$Integrity_S3 ~ Qualtrics_DF$S3_Condition, data = Qualtrics_DF)
+
+#Normality
+
+shapiro.test(S1_HP$Performance_S1)
+shapiro.test(S2_HP$Performance_S2)
+shapiro.test(S3_HP$Performance_S3)
+
+shapiro.test(S1_LP$Performance_S1)
+shapiro.test(S2_LP$Performance_S2)
+shapiro.test(S3_LP$Performance_S3)
+
+shapiro.test(S1_HI$Integrity_S1)
+shapiro.test(S2_HI$Integrity_S2)
+shapiro.test(S3_HI$Integrity_S3)
+
+shapiro.test(S1_LI$Integrity_S1)
+shapiro.test(S2_LI$Integrity_S2)
+shapiro.test(S3_LI$Integrity_S3)
+
+
+shapiro.test(S1_HP$Trust_S1)
+shapiro.test(S2_HP$Trust_S2)
+shapiro.test(S3_HP$Trust_S3)
+
+shapiro.test(S1_LP$Trust_S1)
+shapiro.test(S2_LP$Trust_S2)
+shapiro.test(S3_LP$Trust_S3)
+
+shapiro.test(S1_HI$Trust_S1)
+shapiro.test(S2_HI$Trust_S2)
+shapiro.test(S3_HI$Trust_S3)
+
+shapiro.test(S1_LI$Trust_S1)
+shapiro.test(S2_LI$Trust_S2)
+shapiro.test(S3_LI$Trust_S3)
+
+
+
+```
+
+### Histograms
+
+#### Frequency of Participant Risk Scores
+
+```{r Histograms1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Risk_S1_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Risk_S1,
+                                 fill = S1_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Risk Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Risk_S2_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Risk_S2,
+                                 fill = S2_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Risk Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Risk_S3_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Risk_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Risk Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Risk_legend_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Risk_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=0.01, colour = "white", na.rm = TRUE) + 
+  theme(legend.position = "left",
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(face="bold")
+        ) +
+  scale_fill_brewer(palette = "Paired")
+
+
+
+Risk_Histogram <- ggarrange(Risk_S1_Histogram, Risk_S2_Histogram, Risk_S3_Histogram,
+                            Risk_legend_Histogram, ncol = 2, nrow = 2)
+Risk_Histogram
+
+
+
+```
+
+#### Frequency of Participant Trust Scores
+
+```{r Histograms2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Trust_S1_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Trust_S1,
+                                 fill = S1_Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+  xlim(0, 7) +
+  ylim(0, 30) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Trust_S2_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Trust_S2,
+                                 fill = S2_Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+  xlim(0, 7) +
+  ylim(0, 30) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Trust_S3_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Trust_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=1, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Trust Scores") + 
+  xlim(0, 7) +
+  ylim(0, 30) +
+  scale_fill_brewer(palette = "Paired") 
+
+Trust_legend_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Trust_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=0.01, colour = "white", na.rm = TRUE) + 
+  theme(legend.position = "left",
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(face="bold")
+        ) +
+  scale_fill_brewer(palette = "Paired")
+
+
+
+
+Trust_Histogram <- ggarrange(Trust_S1_Histogram, Trust_S2_Histogram, Trust_S3_Histogram, 
+                             Trust_legend_Histogram, ncol = 2, nrow = 2)
+Trust_Histogram
+
+
+```
+
+#### Frequency of Participant Performance Scores
+
+```{r Histograms3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Performance_S1_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Performance_S1,
+                                 fill = S1_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Performance Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Performance_S2_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Performance_S2,
+                                 fill = S2_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Performance Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Performance_S3_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Performance_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Performance Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+Performance_legend_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Performance_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=0.01, colour = "white", na.rm = TRUE) + 
+  theme(legend.position = "left",
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(face="bold")
+        ) +
+  scale_fill_brewer(palette = "Paired")
+
+
+
+
+Performance_Histogram <- ggarrange(Performance_S1_Histogram, Performance_S2_Histogram, Performance_S3_Histogram, 
+                             Performance_legend_Histogram, ncol = 2, nrow = 2)
+Performance_Histogram
+
+
+```
+
+#### Frequency of Participant Integrity Scores
+
+```{r Histograms4, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Integrity_S1_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Integrity_S1,
+                                 fill = S1_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 1, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Integrity Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Integrity_S2_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Integrity_S2,
+                                 fill = S2_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Integrity Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+
+Integrity_S3_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Integrity_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=2.5, colour = "black", na.rm = TRUE) + 
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.145, vjust = 5.5, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 20, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10, vjust = 2),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Frequency") +
+  xlab("Integrity Scores") + 
+  xlim(0, 100) +
+  ylim(0, 10) +
+  scale_fill_brewer(palette = "Paired") 
+
+Integrity_legend_Histogram <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(x = Integrity_S3,
+                                 fill = S3_Condition) 
+                   ) +
+  geom_histogram(binwidth=0.01, colour = "white", na.rm = TRUE) + 
+  theme(legend.position = "left",
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(face="bold")
+        ) +
+  scale_fill_brewer(palette = "Paired")
+
+
+
+
+Integrity_Histogram <- ggarrange(Integrity_S1_Histogram, Integrity_S2_Histogram, Integrity_S3_Histogram, 
+                             Integrity_legend_Histogram, ncol = 2, nrow = 2)
+Integrity_Histogram
+
+```
+
+### QQ Plots
+
+#### Risk QQ plots
+
+```{r QQplots1, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+
+Risk_QQ_S1 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Risk_S1) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+  
+Risk_QQ_S2 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Risk_S2) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+ 
+Risk_QQ_S3 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Risk_S3) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+   
+
+
+Risk_QQ <- ggarrange(Risk_QQ_S1, Risk_QQ_S2, Risk_QQ_S3, 
+                             ncol = 2, nrow = 2)
+Risk_QQ
+
+
+
+```
+
+#### Trust QQ Plots
+
+```{r, QQplots2, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Trust_QQ_S1 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Trust_S1) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+  
+Trust_QQ_S2 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Trust_S2) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+ 
+Trust_QQ_S3 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Trust_S3) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+   
+
+
+Trust_QQ <- ggarrange(Trust_QQ_S1, Trust_QQ_S2, Trust_QQ_S3, 
+                             ncol = 2, nrow = 2)
+Trust_QQ
+
+
+
+```
+
+#### Perfromance QQ Plots
+
+```{r, QQplots3, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Performance_QQ_S1 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Performance_S1) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+  
+Performance_QQ_S2 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Performance_S2) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+ 
+Performance_QQ_S3 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Performance_S3) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+   
+
+
+Performance_QQ <- ggarrange(Performance_QQ_S1, Performance_QQ_S2, Performance_QQ_S3, 
+                             ncol = 2, nrow = 2)
+Performance_QQ
+
+
+
+```
+
+#### Integrity QQ Plots
+
+```{r, QQplots4, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+
+Integrity_QQ_S1 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Integrity_S1) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 1") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+  
+Integrity_QQ_S2 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Integrity_S2) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 2") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+ 
+Integrity_QQ_S3 <- ggplot(data = Qualtrics_DF, 
+                   mapping = aes(sample = Integrity_S3) 
+                   ) +
+  stat_qq_line(na.rm = TRUE) +
+  stat_qq(na.rm = TRUE) +
+  theme_classic() +
+  labs(tag = "Application 3") +
+  theme(plot.title = element_text(hjust = -0.065, vjust = 6, size = 12), 
+        plot.tag.position = c(0.065, 1.15), 
+        plot.margin = margin(t = 30, r = 30, b = 10, l = 30), 
+        plot.tag = element_text(face = "bold", size = 10),
+        axis.title = element_text(face="bold"),
+        legend.position = "none")+ 
+  ylab("Sample Quantiles") + 
+  xlab("Theoretical Quantiles") 
+   
+
+
+Integrity_QQ <- ggarrange(Integrity_QQ_S1, Integrity_QQ_S2, Integrity_QQ_S3, 
+                             ncol = 2, nrow = 2)
+Integrity_QQ
+
+
+
+```
+
+## One-Tailed T-Tests {.tabset}
+
+### Performance Score Full Output
+<br>
+Car - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+S1_P_DF <- merge(S1_HP, S1_LP, all=TRUE)
+S1_I_DF <- merge(S1_HI, S1_LI, all=TRUE)
+S2_P_DF <- merge(S2_HP, S2_LP, all=TRUE)
+S2_I_DF <- merge(S2_HI, S2_LI, all=TRUE)
+S3_P_DF <- merge(S3_HP, S3_LP, all=TRUE)
+S3_I_DF <- merge(S3_HI, S3_LI, all=TRUE)
+
+t.test(Performance_S1 ~ S1_Condition, 
+ data = S1_P_DF,
+ alternative = "greater", 
+ p.adj = "none")
+
+```
+Cell Select - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(Performance_S2 ~ S2_Condition, 
+ data = S2_P_DF,
+ alternative = "greater", 
+ p.adj = "none")
+```
+DataDoc - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+t.test(Performance_S3 ~ S3_Condition, 
+ data = S3_P_DF,
+ alternative = "greater", 
+ p.adj = "none")
+```
+
+### Performance Score Summary
+
+<br><br> **Autonomous Vehicle S1** <br>
+
+```{r Manipulation check for perceived perfromance, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Performance_S1 ~ S1_Condition, data = Qualtrics_DF,
+               alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+              
+```
+
+<br><br> **Virtual Assistant Cell Select S2** <br>
+
+```{r Manipulation check for perceived perfromance2, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Performance_S2 ~ S2_Condition, data = Qualtrics_DF,
+               alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+```
+
+<br><br> **DataDoc S3** <br>
+
+```{r Manipulation check for perceived perfromance3, echo=FALSE, message=FALSE, warning=FALSE}
+formattable(pairwise_t_test(Performance_S3 ~ S3_Condition, data = Qualtrics_DF,
+                alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+```
+
+
+### Intergrity Score Full Output
+<br>
+Car - HI/LI
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Integrity_S1 ~ S1_Condition, 
+ data = S1_I_DF,
+ alternative = "greater", 
+ p.adj = "none")
+
+```
+Cell Select - HI/LI
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Integrity_S2 ~ S2_Condition, 
+ data = S2_I_DF,
+ alternative = "greater", 
+ p.adj = "none")
+
+```
+Airline - HI/LI
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Integrity_S3 ~ S3_Condition, 
+ data = S3_I_DF,
+ alternative = "greater", 
+ p.adj = "none")
+
+```
+
+### Integrity Score Summary
+
+<br><br> **Autonomous Vehicle S1** <br>
+
+```{r Manipulation check for perceived integrity1, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+formattable(pairwise_t_test(Integrity_S1 ~ S1_Condition, data = Qualtrics_DF,
+               alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+
+```
+
+<br><br> **Virtual Assistant Cell Select S2** <br>
+
+```{r Manipulation check for perceived integrity2, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Integrity_S2 ~ S2_Condition, data = Qualtrics_DF,
+                alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+
+```
+
+<br><br> **Airline Profiling S3** <br>
+
+```{r Manipulation check for perceived integrity3, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Integrity_S3 ~ S3_Condition, data = Qualtrics_DF,
+                alternative = "greater", p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+
+```
+
+## Two Tailed T-Tests {.tabset}
+
+### Trust Score Full Output
+
+Car - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S1 ~ S1_Condition, 
+ data = S1_P_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+Car - HI/LI
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S1 ~ S1_Condition, 
+ data = S1_I_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+Cell Select - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S2 ~ S2_Condition, 
+ data = S2_P_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+Cell Select - HI/LI
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S2 ~ S2_Condition, 
+ data = S2_I_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+DataDoc - HP/LP
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S3 ~ S3_Condition, 
+ data = S3_P_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+Airline - HI/LI
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+t.test(Trust_S3 ~ S3_Condition, 
+ data = S3_I_DF,
+ alternative = "two.sided", 
+ p.adj = "none")
+
+```
+
+
+
+
+### Trust Scores Summary
+
+<br><br> **Autonomous Vehicle S1** <br>
+
+```{r Trust Performance T Test1, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Trust_S1 ~ S1_Condition, data = Qualtrics_DF,
+                alternative = "two.sided", 
+                p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+```
+
+<br><br> **Virtual Assistant Cell Select S2** <br>
+
+```{r Trust Performance T Test2, echo=FALSE, message=FALSE, warning=FALSE}
+
+formattable(pairwise_t_test(Trust_S2 ~ S2_Condition, data = Qualtrics_DF,
+                alternative = "two.sided", 
+                p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+```
+
+<br><br> **DataDoc (HP LP) Airline Profiling (HI LI)** <br>
+
+```{r Trust Performance T Test3, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+formattable(pairwise_t_test(Trust_S3 ~ S3_Condition, data = Qualtrics_DF,
+                alternative = "two.sided", 
+                p.adj = "none", pool.sd = FALSE), align =c("l","c","c", "c", "c", "c", "r", "c", "r"), list(
+   area(col=8) ~ formatter("span", 
+                 style = ~ style(color = ifelse(`p.adj` < 0.05, "green", "white"), 
+                                font.weight = ifelse(`p.adj` < 0.05, "bold", "normal"))),
+   table.attr = 'class=\"table table-striped\" style="font-size: 18px"'))
+
+
+```
+
+## Exploratory Analysis {.tabset}
+
+**Exploratory Analysis**
+<br>
+
+### Regression Models
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Models
+model1=lm(Trust_S1~1,Qualtrics_DF)
+model2=lm(Trust_S1~Performance_S1,Qualtrics_DF)
+model3=lm(Trust_S1~Performance_S1 + Integrity_S1,Qualtrics_DF)
+model4=lm(Trust_S1~Performance_S1 + Integrity_S1 + Risk_S1,Qualtrics_DF)
+
+summary(model2)
+standardCoefs(model2)
+summary(model3)
+standardCoefs(model3)
+summary(model4)
+standardCoefs(model4)
+```
+
+### Regression Comparison
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Model Comparison
+tab_model(model1, model2, model3, model4, 
+title = "Regression Model Comparison", 
+show.aic = TRUE,  
+col.order = c("p") )
+
+####ANOVA to calculate the sum of squares. 
+####If each model is statistically significant 
+#it means adding the variable 
+#led to some improvement.
+
+tab_df(anova(model1,model2,model3,model4), title = "ANOVA between models <br> 
+<i>Significance interpreted as improvement
+ in model due to addition of variable<i>")
+```
+
+### Correlations - Collapsed conditions
+
+```{r block, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+cor.test(Qualtrics_DF$Performance_S1, Qualtrics_DF$Integrity_S1)
+
+cor.test(Qualtrics_DF$Performance_S2, Qualtrics_DF$Integrity_S2)
+
+cor.test(Qualtrics_DF$Performance_S3, Qualtrics_DF$Integrity_S3)
+
+
+
+```
+
+### Correlations - Between Condition Type (P or I) for each AI Application
+
+<br><br><br> **Performance Conditions - Correlations between performance and integrity scores for each Application** <br><br><br>
+
+```{r block 2, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+S1_Performance_Conditions_list <- list(S1_HP, S1_LP)
+S1_Performance_Conditions <- S1_Performance_Conditions_list %>% reduce(full_join, by=NULL)
+S2_Performance_Conditions_list <- list(S2_HP, S2_LP)
+S2_Performance_Conditions <- S2_Performance_Conditions_list %>% reduce(full_join, by=NULL)
+S3_Performance_Conditions_list <- list(S3_HP, S3_LP)
+S3_Performance_Conditions <- S3_Performance_Conditions_list %>% reduce(full_join, by=NULL)
+
+cor.test(S1_Performance_Conditions$Performance_S1, S1_Performance_Conditions$Integrity_S1)
+cor.test(S2_Performance_Conditions$Performance_S2, S2_Performance_Conditions$Integrity_S2)
+cor.test(S3_Performance_Conditions$Performance_S3, S3_Performance_Conditions$Integrity_S3)
+
+
+```
+
+<br><br><br><br><br><br> **Integrity Conditions - Correlations between performance and integrity scores for each Application** <br><br><br>
+
+```{r block 3, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+S1_Integrity_Conditions_list <- list(S1_HI, S1_LI)
+S1_Integrity_Conditions <- S1_Integrity_Conditions_list %>% reduce(full_join, by=NULL)
+S2_Integrity_Conditions_list <- list(S2_HI, S2_LI)
+S2_Integrity_Conditions <- S2_Integrity_Conditions_list %>% reduce(full_join, by=NULL)
+S3_Integrity_Conditions_list <- list(S3_HI, S3_LI)
+S3_Integrity_Conditions <- S3_Integrity_Conditions_list %>% reduce(full_join, by=NULL)
+
+cor.test(S1_Integrity_Conditions$Performance_S1, S1_Integrity_Conditions$Integrity_S1)
+cor.test(S2_Integrity_Conditions$Performance_S2, S2_Integrity_Conditions$Integrity_S2)
+cor.test(S3_Integrity_Conditions$Performance_S3, S3_Integrity_Conditions$Integrity_S3)
+
+
+```
+
+## Summary
+
+<br>
+
+![](images/James%20Tables.PNG)
